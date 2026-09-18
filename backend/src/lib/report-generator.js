@@ -749,12 +749,15 @@ expressions.filters.count = function(input, severity, scoreType) {
             scoreAttribute = "environmentalSeverity";            
     }
     for(var i = 0; i < input.length; i++){
-
-        if(input[i].cvss[scoreAttribute] === severity){
+        var cvss = input[i] && input[i].cvss
+        if(cvss && cvss[scoreAttribute] === severity){
             count += 1;
         }
     }
 
+    // A number: 0 is falsy, so the filter can drive a condition or a table row
+    // loop that removes the row when nothing matches, e.g. first cell
+    // {#findings | count:'Medium'}Medium ... last cell {findings | count:'Medium'}{/}
     return count;
 }
 
