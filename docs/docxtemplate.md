@@ -53,7 +53,42 @@ To handle images, HTML values with images are converted into an array of text an
 {-w:p poc}{@text | convertHTML}
                                             {-w:p images}{%image}
                                     Image 1 - {caption}{/images}{/poc}
+
+// HTML rendered with a dedicated formatting profile (see Styles)
+-> {@text | convertHTML:'remediation'}
 ```
+
+A raw tag (`{@...}`) replaces the whole paragraph that contains it, including the font set on that paragraph in the template.
+The formatting of converted HTML is therefore not taken from the template paragraph but from the [report formatting configuration](docxtemplate.md?id=formatting-of-converted-html).
+
+### Table cell colors
+
+`cvss.cellColor`, `cvss.temporalCellColor`, `cvss.environmentalCellColor`, `remediation.cellColorComplexity` and `remediation.cellColorPriority` are raw OOXML fragments that shade a table cell with the color configured in *Settings > Report* for the corresponding severity / complexity / priority.
+Put the tag alone in a paragraph of the cell to color:
+
+```
++---------------------+
+| {@cvss.cellColor}   |
+| {identifier}        |
++---------------------+
+```
+
+The paragraph holding the tag disappears and the shading is merged into the cell properties (the whole cell is colored, the row keeps its natural height). This replaces the pattern of repeating the cell content inside `{#cvss.baseSeverity == '...'}` conditions with different text highlights.
+
+### Removing table rows when a value is empty or zero
+
+When a section `{#...}` starts in one cell of a table row and ends (`{/}`) in another cell of the same row, docxtemplater loops over the whole row: a falsy value (`0`, empty array, empty string) removes the row, a number or an object renders it once. Together with the [count](docxtemplate.md?id=count) filter this removes the rows of a severity summary that would show 0:
+
+```
+| Severity                              | Count                              |
+|---------------------------------------|------------------------------------|
+| {#findings | count:'Critical'}Critical | {findings | count:'Critical'}{/}  |
+| {#findings | count:'High'}High         | {findings | count:'High'}{/}      |
+| {#findings | count:'Medium'}Medium     | {findings | count:'Medium'}{/}    |
+| {#findings | count:'Low'}Low           | {findings | count:'Low'}{/}       |
+```
+
+Note that `count` uses the *environmental* severity unless a score type is given: `{findings | count:'Medium':'base'}`.
 
 ## Audit Object
 
@@ -202,6 +237,9 @@ List of findings. Array of Objects:
 * **findings[i].cvss.temporalSeverity**
 * **findings[i].cvss.environmentalMetricScore**
 * **findings[i].cvss.environmentalSeverity**
+* **findings[i].cvss.cellColor** (raw OOXML: table cell shading matching the base severity, see [Table cell colors](docxtemplate.md?id=table-cell-colors))
+* **findings[i].cvss.temporalCellColor** / **findings[i].cvss.environmentalCellColor**
+* **findings[i].remediation.cellColorComplexity** / **findings[i].remediation.cellColorPriority**
 * **findings[i].cvssObj** (Object of cvss Criterias)
 * **findings[i].poc** (HTML with images)
 * **findings[i].affected** (HTML without images)
@@ -253,17 +291,51 @@ CLEANUP SECTION (or use {cleanup.name} as title)
 
 Styles for simple text can be defined and applied directly in the Docx Template.
 
-But in order to apply styles to the data from HTML editors, they must be defined in the Docx Template according to this :
+### Formatting of converted HTML
+
+Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a configuration made of three layers, each one overriding the previous:
+
+1. built-in defaults (no explicit formatting: the document defaults of the template apply);
+2. `backend/src/config/report-styles.json` - deployment wide defaults, editable without rebuilding (the folder is bind-mounted in Docker, the file is re-read when modified);
+3. the template's own overrides, edited in the WebUI: *Data > Templates >* <i class="fa fa-font"></i> *Report formatting*. Empty fields inherit from the layer below.
+
+```json
+{
+  "profiles": {
+    "text":        { "font": "Helvetica", "size": 12 },
+    "caption":     { "font": "Helvetica", "size": 8, "alignment": "center" },
+    "remediation": { "font": "Helvetica", "size": 12, "color": "333333" }
+  },
+  "inlineCode": { "font": "Consolas", "size": 12, "shading": "F2F2F2" },
+  "codeBlock":  { "font": "Consolas", "size": 10, "shading": "D9D9D9", "spacingAfter": 6 },
+  "link":       { "color": "0563C1", "underline": true },
+  "highlightSyntax": false
+}
+```
+
+| Key | Applies to | Fields |
+|:---:|:----------:|:------:|
+| `profiles.text` | paragraphs, lists and table cells of `{@field \| convertHTML}` | font, size (pt), color, bold, italic, alignment (left/center/right/justify), shading, spacingBefore, spacingAfter (pt), lineSpacing (multiple), pStyle |
+| `profiles.caption` | figure captions (`<figcaption>`, `<legend>`) | same |
+| `profiles.<name>` | `{@field \| convertHTML:'<name>'}` - e.g. a dedicated font for a section | same |
+| `inlineCode` | `<code>` in a paragraph | font, size, color, shading, rStyle (default `CodeChar`) |
+| `codeBlock` | code blocks (one shaded paragraph, lines separated by line breaks) | font, size, color, shading, spacingBefore, spacingAfter, lineSpacing, pStyle (default `Code`) |
+| `link` | hyperlinks | color, underline, rStyle (default `PwndocLink`) |
+| `highlightSyntax` | code blocks | `true` to color tokens with `syntaxColors` (light palette by default) |
+
+Colors are hex RGB with or without `#`. The name given to `convertHTML` that does not match a profile is used as a Word paragraph style id (previous behaviour).
+
+Headings (`Heading1`..`Heading6`), lists (`ListParagraph` + `numbering.xml`) and the style ids listed above still refer to styles of the Docx Template: when the template defines them they apply, the configuration adds direct formatting on top of them.
 
 | HTML Style | Docx Style    |
 |:----------:|:----------:   |
-| paragraph  | HTMLTextStyle |
 | H1         | Heading1      |
 | H2         | Heading2      |
 | H3         | Heading3      |
 | H4         | Heading4      |
 | H5         | Heading5      |
 | H6         | Heading6      |
+| list item  | ListParagraph |
 | code (<>)  | CodeChar      |
 | code block | Code          |
 | Hyperlink  | PwndocLink    |
@@ -398,20 +470,24 @@ Convert Date to proper format using locale. Must be used on values with date for
 ### convertHTML
 
 Convert HTML values to OOXML format. See [HTML values](docxtemplate.md?id=html-values-from-text-editors) for usage.
+The optional argument selects a [formatting profile](docxtemplate.md?id=formatting-of-converted-html); an unknown name is used as a Word paragraph style id.
 
 > Use in template document
 >```
 {@value | convertHTML}
+{@value | convertHTML:'remediation'}
 >```
 
 ### count
 
-Count the number of vulnerabilities by CVSS severity.
+Count the number of vulnerabilities by CVSS severity. The optional second argument selects the score: `'base'`, `'temporal'` or `'environmental'` (default).
+Since `0` is falsy the filter can also drive a condition or [remove a table row](docxtemplate.md?id=removing-table-rows-when-a-value-is-empty-or-zero).
 
 > Use in template document
 >```
 // Example counting 'Critical' vulnerabilities
 {findings | count: 'Critical'}
+{findings | count: 'Critical':'base'}
 >```
 
 ### d
