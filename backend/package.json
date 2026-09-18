@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@hocuspocus/server": "^2.15.2",
+    "@xmldom/xmldom": "^0.9.12",
     "angular-expressions": "^1.4.3",
     "bcrypt": "^5.1.0",
     "body-parser": "^1.20.2",

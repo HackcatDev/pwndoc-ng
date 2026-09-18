@@ -9,6 +9,7 @@ var chartGenerator = require('./chart-generator');
 var utils = require('./utils');
 var html2ooxml = require('./html2ooxml');
 var reportStyles = require('./report-styles');
+var ooxmlPostprocess = require('./ooxml-postprocess');
 var _ = require('lodash');
 var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
@@ -138,6 +139,9 @@ async function generateDoc(audit) {
             throw error
         }
     }
+
+    // Merge cell shading fragments ({@cvss.cellColor}...) into the cells' own properties
+    ooxmlPostprocess.processZip(doc.getZip());
 
     // Include refs in document
     const relsPath = "word/_rels/document.xml.rels";
