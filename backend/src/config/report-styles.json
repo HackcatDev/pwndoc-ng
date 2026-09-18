@@ -1,0 +1,13 @@
+{
+  "_comment": "Deployment-wide formatting applied to HTML fields converted with convertHTML. Sizes in pt, colors hex RGB, spacing in pt. Any value can be overridden per report template from the Templates page. A profile is selected in the template with {@field | convertHTML:'profileName'}; the 'text' profile is used when no name is given, 'caption' is used for figure captions.",
+  "profiles": {
+    "text":        { "font": "Helvetica", "size": 12 },
+    "caption":     { "font": "Helvetica", "size": 8, "alignment": "center" },
+    "remediation": { "font": "Helvetica", "size": 12 },
+    "references":  { "font": "Helvetica", "size": 12 }
+  },
+  "inlineCode": { "font": "Consolas", "size": 12, "shading": "F2F2F2" },
+  "codeBlock":  { "font": "Consolas", "size": 10, "shading": "D9D9D9", "spacingBefore": 0, "spacingAfter": 6 },
+  "link":       { "color": "0563C1", "underline": true },
+  "highlightSyntax": false
+}

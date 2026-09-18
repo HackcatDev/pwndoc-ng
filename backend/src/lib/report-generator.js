@@ -8,6 +8,7 @@ var customGenerator = require('./custom-generator');
 var chartGenerator = require('./chart-generator');
 var utils = require('./utils');
 var html2ooxml = require('./html2ooxml');
+var reportStyles = require('./report-styles');
 var _ = require('lodash');
 var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
@@ -25,6 +26,7 @@ var globalAbstractNumId = null // Global variable to share abstractNumId between
 var abstractNumCreated = false // Flag to avoid creating abstractNum multiple times
 var bulletDefinitionCreated = false // Flag to avoid creating bullet definition multiple times
 var globalBulletNumId = null // Global variable to store dynamic bullet ID
+var currentStyles = null // Formatting configuration resolved for the template being rendered
 
 const encodeHTMLEntities = s => s.replace(/[\u00A0-\u9999<>&]/g, i => '&#'+i.charCodeAt(0)+';')
 
@@ -108,6 +110,10 @@ async function generateDoc(audit) {
     });
     
     customGenerator.apply(preppedAudit);
+
+    // Formatting used by convertHTML: config/report-styles.json overridden by the template settings
+    var templateStyles = audit.template && (typeof audit.template.toObject === 'function' ? audit.template.toObject().styles : audit.template.styles)
+    currentStyles = reportStyles.resolve(templateStyles)
 
     try {
         doc.render(preppedAudit);
@@ -541,56 +547,28 @@ expressions.filters.where = function(input, query) {
     });
 };
 
-// Convert HTML data to Open Office XML format: {@input | convertHTML: 'customStyle' | 'listIds'}
+// Convert HTML data to Open Office XML format: {@input | convertHTML}
+// Optional first argument: name of a formatting profile from the report styles
+// configuration (config/report-styles.json, overridable per template), e.g.
+// {@text | convertHTML:'remediation'}. An unknown name is used as a Word
+// paragraph style id (legacy behaviour).
+// Optional second argument: array of numId values for ordered lists.
 expressions.filters.convertHTML = function(input, style, listIds) {
-    if (typeof input === 'undefined') {
-        var result = html2ooxml('')
-    } else {
-        // Compter les balises <ol> dans l'input HTML
-        let olCount = 0;
-        let ulCount = 0;
-        
-        if (input && typeof input === 'string') {
-            olCount = (input.match(/<ol/g) || []).length;
-            ulCount = (input.match(/<ul/g) || []).length;
+    if (typeof input === 'undefined' || input === null) return ''
+
+    let listIdsArray = []
+    if (listIds) {
+        if (typeof listIds === 'string') {
+            try { listIdsArray = JSON.parse(listIds) } catch (e) { listIdsArray = [listIds] }
+        } else if (Array.isArray(listIds)) {
+            listIdsArray = listIds
+        } else {
+            listIdsArray = [listIds]
         }
-        
-        console.log(`📄 List count in convertHTML:`);
-        console.log(`   🔢 Numbered lists (<ol>): ${olCount}`);
-        console.log(`   🔘 Bullet lists (<ul>): ${ulCount}`);
-        
-        // Convertir listIds en array si c'est une string
-        let listIdsArray = [];
-        if (listIds) {
-            if (typeof listIds === 'string') {
-                try {
-                    listIdsArray = JSON.parse(listIds);
-                } catch (e) {
-                    listIdsArray = [listIds];
-                }
-            } else if (Array.isArray(listIds)) {
-                listIdsArray = listIds;
-            } else {
-                listIdsArray = [listIds];
-            }
-        }
-        
-        // If we don't have provided IDs but have numbered lists, generate them automatically
-        if (olCount > 0 && listIdsArray.length === 0) {
-            // Generate unpredictable IDs between 10000 and 99999
-            listIdsArray = Array.from({length: olCount}, () => Math.floor(Math.random() * 90000) + 10000);
-            console.log(`🎲 Automatic generation of unpredictable IDs:`, listIdsArray);
-        }
-        
-        console.log(`🆔 List IDs to use:`, listIdsArray);
-        
-        // TOTAL ELIMINATION: No longer modify numbering.xml at all
-        // Use ONLY existing template definitions
-        console.log(`🚫 ELIMINATION: No modification of numbering.xml (olCount: ${olCount}, ulCount: ${ulCount})`);
-        
-        var result = html2ooxml(input.replace(/(<p><\/p>)+$/, ''), style, listIdsArray)
     }
-    return result;
+
+    var styles = currentStyles || reportStyles.resolve()
+    return html2ooxml(String(input).replace(/(<p><\/p>)+$/, ''), style, listIdsArray, { styles: styles })
 }
 
 // Fonction pour modifier le numbering.xml du document DOCX
