@@ -1,7 +1,14 @@
 version: '3'
+# Persistent state lives in three places, back them up together (see docs/installation.md):
+#   - the `mongo-data` named volume (database `pwndoc`: audits, vulnerabilities, images, users, settings)
+#   - ./backend/report-templates (the .docx files of the report templates)
+#   - ./backend/src/config (config.json with the generated JWT secrets, roles.json, report-styles.json)
+# The volume is named after the compose project (the directory name by default): keep the same
+# directory name or set COMPOSE_PROJECT_NAME when moving the checkout, otherwise a new empty
+# volume is created. Container names are referenced by config.json and the frontend nginx.conf.
 services:
   mongodb:
-    image: mongo:4
+    image: mongo:4.4
     container_name: mongo-pwndoc-ng
     volumes:
       - mongo-data:/data/db

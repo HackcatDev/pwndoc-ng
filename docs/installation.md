@@ -41,6 +41,8 @@ git pull
 docker-compose up -d --build
 ```
 
+See [Upgrading with data preservation](installation.md?id=upgrading-with-data-preservation) before updating a production instance: three tracked files/folders (`backend/src/config`, `backend/report-templates`, `backend/ssl`) are modified by the running application and must not be overwritten by `git pull`.
+
 Application is accessible through https://localhost:8443
 API is accessible through https://localhost:8443/api
 
@@ -127,3 +129,51 @@ To restore :
 - Stop containers
 - Replace the current `mongo-data` volume with the backed up one
 - Start containers
+
+A raw copy of the volume is only consistent when the containers are stopped and is not portable across MongoDB major versions. A logical dump works while the instance is running and restores on any version:
+
+```
+mkdir -p backup
+docker exec mongo-pwndoc-ng mongodump --archive --gzip --db pwndoc > backup/pwndoc-$(date +%F).archive.gz
+docker exec -i mongo-pwndoc-ng mongorestore --archive --gzip --drop < backup/pwndoc-2024-01-31.archive.gz   # restore
+```
+
+The database is not the only state. Back up these folders together with the dump:
+
+| What | Where | Notes |
+|------|-------|-------|
+| Report templates (.docx) | `backend/report-templates/` | the database only stores the template name |
+| JWT secrets, roles, report formatting defaults | `backend/src/config/config.json`, `roles.json`, `report-styles.json` | `config.json` is rewritten by the backend on first start with random secrets |
+| TLS certificates (if customized) | `backend/ssl/`, `frontend/ssl/` | baked into the images at build time |
+
+!> If *Settings > Dangerous settings* enables automatic deletion of old audits, disable it before restoring an old dump: the daily job deletes audits by creation date.
+
+## Upgrading with data preservation
+
+The database schema has no migration step; upgrading is a rebuild of the backend/frontend images against the same volume. The traps are the compose project name (the volume is named `<project>_mongo-data`, `<project>` being the directory name unless `COMPOSE_PROJECT_NAME` is set) and the tracked files that the running instance modifies.
+
+```
+cd <directory containing docker-compose.yml>
+
+# 1. backup
+mkdir -p backup
+docker exec mongo-pwndoc-ng mongodump --archive --gzip --db pwndoc > backup/pwndoc-$(date +%F).archive.gz
+cp -a backend/report-templates backend/src/config backend/ssl frontend/ssl backup/
+
+# 2. switch the code (git) without touching the runtime files
+git stash push -u -- backend/src/config backend/report-templates backend/ssl frontend/ssl
+git fetch <remote>
+git checkout <branch or tag>
+git stash pop
+
+# 3. rebuild what changed; the mongodb container and its volume are untouched
+docker compose build backend frontend
+docker compose up -d backend frontend
+docker compose logs -f backend
+```
+
+Roll back with `git checkout <previous commit>` and the same build/up commands. Restoring the dump is only needed if data was changed in between.
+
+Keep the compose directory name (or set `COMPOSE_PROJECT_NAME` in a `.env` file) so the existing `mongo-data` volume is reused, and keep the container names `mongo-pwndoc-ng`, `pwndoc-ng-backend` and `pwndoc-ng-languagetool`: they are referenced by `backend/src/config/config.json` and `frontend/.docker/nginx.conf`.
+
+Changing the MongoDB major version (e.g. 4.4 → 6.0) is a separate operation: upgrade one major at a time and run `db.adminCommand({setFeatureCompatibilityVersion: "<version>"})` between steps, or `mongodump` on the old version and `mongorestore` into a fresh volume on the new one.
