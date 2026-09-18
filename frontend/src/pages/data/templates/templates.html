@@ -64,6 +64,19 @@
                   </q-btn>
               
                   <q-btn
+                    v-if="UserService.isAllowed('templates:update')"
+                    size="sm"
+                    flat
+                    color="secondary"
+                    icon="fa fa-font"
+                    @click="openStyles(props.row)"
+                  >
+                    <q-tooltip anchor="bottom middle" self="center left" :delay="500" content-class="text-bold">
+                      {{ $t('styles.tooltip') }}
+                    </q-tooltip>
+                  </q-btn>
+
+                  <q-btn
                     size="sm"
                     flat
                     color="info"
@@ -206,6 +219,103 @@
         <q-card-actions align="right">
             <q-btn color="primary" outline @click="$refs.editModal.hide()">{{$t('btn.cancel')}}</q-btn>
             <q-btn color="secondary" unelevated @click="updateTemplate()">{{$t('btn.update')}}</q-btn>
+        </q-card-actions>
+    </q-card>
+</q-dialog>
+<q-dialog ref="stylesModal" persistent>
+    <q-card style="width:1100px; max-width:95vw">
+        <q-bar class="bg-fixed-primary text-white">
+            <div class="q-toolbar-title">
+                {{$t('styles.title')}}<span v-if="stylesTemplate"> — {{stylesTemplate.name}}</span>
+            </div>
+            <q-space />
+            <q-btn dense flat icon="close" @click="$refs.stylesModal.hide()" />
+        </q-bar>
+
+        <q-card-section class="scroll" style="max-height: 75vh">
+            <div class="text-grey-8 q-mb-md" v-html="$t('styles.description')"></div>
+
+            <!-- Text profiles -->
+            <div class="text-bold q-mb-sm">{{$t('styles.profiles')}}</div>
+            <div class="text-grey-8 q-mb-sm" v-html="$t('styles.profilesInfo')"></div>
+            <q-expansion-item
+                v-for="(profile, name) in currentStyles.profiles"
+                :key="name"
+                dense
+                dense-toggle
+                expand-separator
+                :label="name"
+                :caption="name === 'text' ? $t('styles.profileTextCaption') : (name === 'caption' ? $t('styles.profileCaptionCaption') : '{@field | convertHTML:\'' + name + '\'}')"
+                header-class="bg-grey-2"
+            >
+                <div class="row q-col-gutter-sm q-pa-sm">
+                    <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.font')" v-model="profile.font" :placeholder="stylesDefault('profiles', 'font', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="4" max="72" step="0.5" :label="$t('styles.size')" v-model.number="profile.size" :placeholder="stylesDefault('profiles', 'size', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="profile.color" :placeholder="stylesDefault('profiles', 'color', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.shading')" v-model="profile.shading" :placeholder="stylesDefault('profiles', 'shading', name)" clearable />
+                    <q-select class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.alignment')" v-model="profile.alignment" :options="alignmentOptions" emit-value map-options options-dense />
+                    <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.bold')" v-model="profile.bold" :options="booleanOptions" emit-value map-options options-dense />
+                    <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.italic')" v-model="profile.italic" :options="booleanOptions" emit-value map-options options-dense />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingBefore')" v-model.number="profile.spacingBefore" :placeholder="stylesDefault('profiles', 'spacingBefore', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingAfter')" v-model.number="profile.spacingAfter" :placeholder="stylesDefault('profiles', 'spacingAfter', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0.5" max="5" step="0.05" :label="$t('styles.lineSpacing')" v-model.number="profile.lineSpacing" :placeholder="stylesDefault('profiles', 'lineSpacing', name)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.pStyle')" v-model="profile.pStyle" :placeholder="stylesDefault('profiles', 'pStyle', name)" clearable />
+                    <div class="col-12 text-right" v-if="!isDefaultProfile(name)">
+                        <q-btn flat dense color="negative" icon="fa fa-trash" :label="$t('styles.removeProfile')" no-caps @click="removeProfile(name)" />
+                    </div>
+                </div>
+            </q-expansion-item>
+            <div class="row q-col-gutter-sm q-mt-sm items-center">
+                <q-input class="col-md-4 col-8" dense outlined :label="$t('styles.newProfile')" v-model="newProfileName" @keyup.enter="addProfile()" />
+                <div class="col-auto"><q-btn dense outline color="secondary" icon="add" :label="$t('styles.addProfile')" no-caps @click="addProfile()" /></div>
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Inline code -->
+            <div class="text-bold q-mb-sm">{{$t('styles.inlineCode')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.font')" v-model="currentStyles.inlineCode.font" :placeholder="stylesDefault('inlineCode', 'font')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="4" max="72" step="0.5" :label="$t('styles.size')" v-model.number="currentStyles.inlineCode.size" :placeholder="stylesDefault('inlineCode', 'size')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.inlineCode.color" :placeholder="stylesDefault('inlineCode', 'color')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.shading')" v-model="currentStyles.inlineCode.shading" :placeholder="stylesDefault('inlineCode', 'shading')" clearable />
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.rStyle')" v-model="currentStyles.inlineCode.rStyle" :placeholder="stylesDefault('inlineCode', 'rStyle')" clearable />
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Code block -->
+            <div class="text-bold q-mb-sm">{{$t('styles.codeBlock')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.font')" v-model="currentStyles.codeBlock.font" :placeholder="stylesDefault('codeBlock', 'font')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="4" max="72" step="0.5" :label="$t('styles.size')" v-model.number="currentStyles.codeBlock.size" :placeholder="stylesDefault('codeBlock', 'size')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.codeBlock.color" :placeholder="stylesDefault('codeBlock', 'color')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.shading')" v-model="currentStyles.codeBlock.shading" :placeholder="stylesDefault('codeBlock', 'shading')" clearable />
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.pStyle')" v-model="currentStyles.codeBlock.pStyle" :placeholder="stylesDefault('codeBlock', 'pStyle')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingBefore')" v-model.number="currentStyles.codeBlock.spacingBefore" :placeholder="stylesDefault('codeBlock', 'spacingBefore')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingAfter')" v-model.number="currentStyles.codeBlock.spacingAfter" :placeholder="stylesDefault('codeBlock', 'spacingAfter')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0.5" max="5" step="0.05" :label="$t('styles.lineSpacing')" v-model.number="currentStyles.codeBlock.lineSpacing" :placeholder="stylesDefault('codeBlock', 'lineSpacing')" clearable />
+                <q-select class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.highlightSyntax')" v-model="currentStyles.highlightSyntax" :options="booleanOptions" emit-value map-options options-dense />
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Links -->
+            <div class="text-bold q-mb-sm">{{$t('styles.links')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.link.color" :placeholder="stylesDefault('link', 'color')" clearable />
+                <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.underline')" v-model="currentStyles.link.underline" :options="booleanOptions" emit-value map-options options-dense />
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.rStyle')" v-model="currentStyles.link.rStyle" :placeholder="stylesDefault('link', 'rStyle')" clearable />
+            </div>
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-actions align="right">
+            <q-btn color="negative" flat @click="resetStyles()">{{$t('styles.reset')}}</q-btn>
+            <q-space />
+            <q-btn color="primary" outline @click="$refs.stylesModal.hide()">{{$t('btn.cancel')}}</q-btn>
+            <q-btn color="secondary" unelevated @click="saveStyles()">{{$t('btn.update')}}</q-btn>
         </q-card-actions>
     </q-card>
 </q-dialog>

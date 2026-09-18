@@ -4,6 +4,7 @@ module.exports = function(app) {
     var Template = require('mongoose').model('Template');
     var acl = require('../lib/auth').acl;
     var utils = require('../lib/utils');
+    var reportStyles = require('../lib/report-styles');
     var fs = require('fs');
 
     // Get templates list
@@ -40,6 +41,36 @@ module.exports = function(app) {
             fs.writeFileSync(`${__basedir}/../report-templates/${template.name}.${template.ext}`, fileBuffer);
             Response.Created(res, data);
         })
+        .catch(err => Response.Internal(res, err))
+    });
+
+    // Get the effective default formatting (built-in defaults + config/report-styles.json)
+    // used when a template does not override a value
+    app.get("/api/templates/styles/defaults", acl.hasPermission('templates:read'), function(req, res) {
+        // #swagger.tags = ['Templates']
+
+        Response.Ok(res, {
+            styles: reportStyles.resolve(),
+            fields: {
+                profile: reportStyles.PROFILE_FIELDS,
+                inlineCode: reportStyles.INLINE_CODE_FIELDS,
+                codeBlock: reportStyles.CODE_BLOCK_FIELDS,
+                link: reportStyles.LINK_FIELDS
+            }
+        })
+    });
+
+    // Update formatting styles of a template (fonts used by convertHTML)
+    app.put("/api/templates/:templateId/styles", acl.hasPermission('templates:update'), function(req, res) {
+        // #swagger.tags = ['Templates']
+
+        if (!req.body.styles || typeof req.body.styles !== 'object') {
+            Response.BadParameters(res, 'Missing required parameters: styles');
+            return;
+        }
+
+        Template.updateStyles(req.params.templateId, reportStyles.sanitize(req.body.styles))
+        .then(data => Response.Ok(res, data))
         .catch(err => Response.Internal(res, err))
     });
 

@@ -45,7 +45,30 @@ export default {
                 file: '',
                 ext: ''
             },
-            templateId: ''
+            templateId: '',
+            // Formatting styles (fonts used by convertHTML) of the selected template
+            stylesTemplate: null,
+            stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}},
+            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null},
+            newProfileName: '',
+            stylesFields: {
+                profile: ['font', 'size', 'color', 'bold', 'italic', 'alignment', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle'],
+                inlineCode: ['font', 'size', 'color', 'shading', 'rStyle'],
+                codeBlock: ['font', 'size', 'color', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle'],
+                link: ['color', 'underline', 'rStyle']
+            },
+            alignmentOptions: [
+                {label: $t('styles.inherit'), value: null},
+                {label: $t('styles.alignLeft'), value: 'left'},
+                {label: $t('styles.alignCenter'), value: 'center'},
+                {label: $t('styles.alignRight'), value: 'right'},
+                {label: $t('styles.alignJustify'), value: 'justify'}
+            ],
+            booleanOptions: [
+                {label: $t('styles.inherit'), value: null},
+                {label: $t('styles.yes'), value: true},
+                {label: $t('styles.no'), value: false}
+            ]
         }
     },
 
@@ -236,6 +259,126 @@ export default {
 
             this.currentTemplate.ext = file.name.split('.').pop()
             fileReader.readAsDataURL(file);
+        },
+
+        // ---- Formatting styles (per template) ----
+
+        emptyStyles: function() {
+            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null}
+        },
+
+        openStyles: function(row) {
+            this.stylesTemplate = row
+            var styles = this.emptyStyles()
+            var saved = row.styles || {}
+            TemplateService.getStylesDefaults()
+            .then((data) => {
+                this.stylesDefaults = data.data.datas.styles || {}
+                if (data.data.datas.fields) this.stylesFields = data.data.datas.fields
+                // Show every profile known by the defaults plus the template specific ones
+                var names = Object.keys(this.stylesDefaults.profiles || {})
+                Object.keys(saved.profiles || {}).forEach(n => { if (!names.includes(n)) names.push(n) })
+                names.forEach(n => { styles.profiles[n] = Object.assign({}, (saved.profiles || {})[n] || {}) })
+                styles.inlineCode = Object.assign({}, saved.inlineCode || {})
+                styles.codeBlock = Object.assign({}, saved.codeBlock || {})
+                styles.link = Object.assign({}, saved.link || {})
+                styles.highlightSyntax = (typeof saved.highlightSyntax === 'boolean') ? saved.highlightSyntax : null
+                this.currentStyles = styles
+                this.$refs.stylesModal.show()
+            })
+            .catch((err) => {
+                Notify.create({
+                    message: err.response ? err.response.data.datas : String(err),
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+            })
+        },
+
+        // Placeholder showing the value inherited from the global configuration
+        stylesDefault: function(section, field, profileName) {
+            var src = section === 'profiles' ? ((this.stylesDefaults.profiles || {})[profileName] || {}) : (this.stylesDefaults[section] || {})
+            var v = src[field]
+            if (v === undefined || v === null || v === '') return $t('styles.inherit')
+            if (typeof v === 'boolean') return v ? $t('styles.yes') : $t('styles.no')
+            return String(v)
+        },
+
+        addProfile: function() {
+            var name = (this.newProfileName || '').trim()
+            if (!/^[a-zA-Z0-9_-]{1,32}$/.test(name)) {
+                Notify.create({message: $t('styles.badProfileName'), color: 'negative', textColor: 'white', position: 'top-right'})
+                return
+            }
+            if (!this.currentStyles.profiles[name]) this.currentStyles.profiles[name] = {}
+            this.newProfileName = ''
+        },
+
+        removeProfile: function(name) {
+            delete this.currentStyles.profiles[name]
+        },
+
+        isDefaultProfile: function(name) {
+            return !!((this.stylesDefaults.profiles || {})[name])
+        },
+
+        // Drops empty values so that they inherit from the configuration
+        cleanStyles: function(styles) {
+            var cleanSection = (obj) => {
+                var out = {}
+                Object.keys(obj || {}).forEach(k => {
+                    var v = obj[k]
+                    if (v === null || v === undefined || v === '') return
+                    out[k] = v
+                })
+                return out
+            }
+            var result = {profiles: {}, inlineCode: cleanSection(styles.inlineCode), codeBlock: cleanSection(styles.codeBlock), link: cleanSection(styles.link)}
+            Object.keys(styles.profiles || {}).forEach(n => {
+                var p = cleanSection(styles.profiles[n])
+                // keep custom profiles even if empty so that they stay listed
+                if (Object.keys(p).length || !this.isDefaultProfile(n)) result.profiles[n] = p
+            })
+            if (typeof styles.highlightSyntax === 'boolean') result.highlightSyntax = styles.highlightSyntax
+            return result
+        },
+
+        saveStyles: function() {
+            if (!this.stylesTemplate) return
+            var styles = this.cleanStyles(this.currentStyles)
+            TemplateService.updateTemplateStyles(this.stylesTemplate._id, styles)
+            .then(() => {
+                this.getTemplates()
+                this.$refs.stylesModal.hide()
+                Notify.create({
+                    message: $t('msg.templateUpdatedOk'),
+                    color: 'positive',
+                    textColor:'white',
+                    position: 'top-right'
+                })
+            })
+            .catch((err) => {
+                Notify.create({
+                    message: err.response ? err.response.data.datas : String(err),
+                    color: 'negative',
+                    textColor: 'white',
+                    position: 'top-right'
+                })
+            })
+        },
+
+        resetStyles: function() {
+            Dialog.create({
+                title: $t('styles.resetTitle'),
+                message: $t('styles.resetConfirm'),
+                ok: {label: $t('btn.confirm'), color: 'negative'},
+                cancel: {label: $t('btn.cancel'), color: 'white'}
+            })
+            .onOk(() => {
+                this.currentStyles = this.emptyStyles()
+                Object.keys(this.stylesDefaults.profiles || {}).forEach(n => { this.currentStyles.profiles[n] = {} })
+            })
         },
 
         dblClick: function(evt, row) {

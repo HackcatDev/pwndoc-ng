@@ -3,7 +3,10 @@ var Schema = mongoose.Schema;
 
 var TemplateSchema = new Schema({
     name:      {type: String, required: true, unique: true},
-    ext:      {type: String, required: true, unique: false}
+    ext:      {type: String, required: true, unique: false},
+    // Formatting overrides for HTML fields converted with convertHTML
+    // (see lib/report-styles.js for the structure)
+    styles:    {type: Schema.Types.Mixed, default: {}}
 
 }, {timestamps: true});
 
@@ -15,7 +18,7 @@ var TemplateSchema = new Schema({
 TemplateSchema.statics.getAll = () => {
     return new Promise((resolve, reject) => {
         var query = Template.find();
-        query.select('name ext')
+        query.select('name ext styles')
         query.exec()
         .then((rows) => {
             resolve(rows);
@@ -30,7 +33,7 @@ TemplateSchema.statics.getAll = () => {
 TemplateSchema.statics.getOne = (templateId) => {
     return new Promise((resolve, reject) => {
         var query = Template.findById(templateId);
-        query.select('name ext')
+        query.select('name ext styles')
         query.exec()
         .then((rows) => {
             resolve(rows);
@@ -74,6 +77,24 @@ TemplateSchema.statics.update = (templateId, template) => {
                 reject({fn: 'BadParameters', message: 'Template name already exists'});
             else
                 reject(err);
+        })
+    });
+}
+
+// Update formatting styles of a template
+TemplateSchema.statics.updateStyles = (templateId, styles) => {
+    return new Promise((resolve, reject) => {
+        var query = Template.findByIdAndUpdate(templateId, {styles: styles}, {new: true});
+        query.select('name ext styles')
+        query.exec()
+        .then((row) => {
+            if (row)
+                resolve(row);
+            else
+                reject({fn: 'NotFound', message: 'Template not found'});
+        })
+        .catch((err) => {
+            reject(err);
         })
     });
 }

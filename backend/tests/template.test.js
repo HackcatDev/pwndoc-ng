@@ -122,6 +122,43 @@ module.exports = function(request, app) {
         expect(response.status).toBe(404)
       })
 
+      it('Get default formatting styles', async () => {
+        var response = await request(app).get('/api/templates/styles/defaults')
+          .set('Cookie', [
+            `token=JWT ${userToken}`
+          ])
+        expect(response.status).toBe(200)
+        expect(response.body.datas.styles.profiles).toBeDefined()
+        expect(response.body.datas.fields.profile).toContain('font')
+      })
+
+      it('Update template formatting styles (sanitized)', async () => {
+        var styles = {profiles: {text: {font: 'Helvetica', size: '11', color: '#zzzzzz'}}, codeBlock: {font: 'Consolas', size: 10}, bogus: true}
+        var response = await request(app).put(`/api/templates/${template1Id}/styles`)
+          .set('Cookie', [
+            `token=JWT ${userToken}`
+          ])
+          .send({styles: styles})
+        expect(response.status).toBe(200)
+        expect(response.body.datas.styles).toEqual({profiles: {text: {font: 'Helvetica', size: 11}}, codeBlock: {font: 'Consolas', size: 10}})
+
+        response = await request(app).get('/api/templates')
+          .set('Cookie', [
+            `token=JWT ${userToken}`
+          ])
+        var tpl = response.body.datas.find(t => t._id === template1Id)
+        expect(tpl.styles.profiles.text.size).toBe(11)
+      })
+
+      it('Update template formatting styles without styles', async () => {
+        var response = await request(app).put(`/api/templates/${template1Id}/styles`)
+          .set('Cookie', [
+            `token=JWT ${userToken}`
+          ])
+          .send({})
+        expect(response.status).toBe(422)
+      })
+
       it('Delete template', async () => {
         var response = await request(app).delete(`/api/templates/${template2Id}`)
           .set('Cookie', [
