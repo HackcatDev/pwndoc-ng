@@ -23,7 +23,10 @@
  *                   lineSpacing, pStyle },
  *   "link":       { color, underline, rStyle },
  *   "highlightSyntax": false,
- *   "syntaxColors": { "hljs-keyword": "0000FF", ... }
+ *   "syntaxColors": { "hljs-keyword": "0000FF", ... },
+ *   "listNumbering": "auto"      // "auto": self-contained list definitions added
+ *                                // to the template; "template": use numId 1 (bullets)
+ *                                // and 2 (ordered) of the template's numbering.xml
  * }
  *
  * Sizes are in points, colors are hex RGB (with or without '#'), spacing in
@@ -43,6 +46,7 @@ const DEFAULTS = {
     codeBlock: {},
     link: {},
     highlightSyntax: false,
+    listNumbering: 'auto',
     syntaxColors: {
         'hljs-keyword': '0000FF',
         'hljs-built_in': '795E26',
@@ -179,6 +183,7 @@ function sanitize(input) {
     if (input.codeBlock) out.codeBlock = cleanFields(input.codeBlock, CODE_BLOCK_FIELDS)
     if (input.link) out.link = cleanFields(input.link, LINK_FIELDS)
     if (input.highlightSyntax !== undefined && input.highlightSyntax !== null && input.highlightSyntax !== '') out.highlightSyntax = !!input.highlightSyntax
+    if (input.listNumbering === 'auto' || input.listNumbering === 'template') out.listNumbering = input.listNumbering
     if (input.syntaxColors && typeof input.syntaxColors === 'object') {
         out.syntaxColors = {}
         for (const cls of Object.keys(input.syntaxColors)) {

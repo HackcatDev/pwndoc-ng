@@ -322,6 +322,7 @@ Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a
 | `codeBlock` | code blocks (one shaded paragraph, lines separated by line breaks) | font, size, color, shading, spacingBefore, spacingAfter, lineSpacing, pStyle (default `Code`) |
 | `link` | hyperlinks | color, underline, rStyle (default `PwndocLink`) |
 | `highlightSyntax` | code blocks | `true` to color tokens with `syntaxColors` (light palette by default) |
+| `listNumbering` | bullet / numbered lists | `auto` (default): self-contained list definitions are added to the document, every numbered list restarts at 1; `template`: use `numId` 1 (bullets) and 2 (numbered) of the template's *numbering.xml* as described below |
 
 Colors are hex RGB with or without `#`. The name given to `convertHTML` that does not match a profile is used as a Word paragraph style id (previous behaviour).
 
@@ -340,7 +341,7 @@ Headings (`Heading1`..`Heading6`), lists (`ListParagraph` + `numbering.xml`) and
 | code block | Code          |
 | Hyperlink  | PwndocLink    |
 
-For `bullet list` and `ordered list` they must be correctly set in the *numbering.xml* file of the Docx Template.
+With `listNumbering: "template"`, `bullet list` and `ordered list` must be correctly set in the *numbering.xml* file of the Docx Template (with the default `auto` mode nothing has to be done).
 
 Open the file with an archive manager
 

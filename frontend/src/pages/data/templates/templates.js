@@ -49,7 +49,7 @@ export default {
             // Formatting styles (fonts used by convertHTML) of the selected template
             stylesTemplate: null,
             stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}},
-            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null},
+            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null},
             newProfileName: '',
             stylesFields: {
                 profile: ['font', 'size', 'color', 'bold', 'italic', 'alignment', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle'],
@@ -63,6 +63,11 @@ export default {
                 {label: $t('styles.alignCenter'), value: 'center'},
                 {label: $t('styles.alignRight'), value: 'right'},
                 {label: $t('styles.alignJustify'), value: 'justify'}
+            ],
+            listNumberingOptions: [
+                {label: $t('styles.inherit'), value: null},
+                {label: $t('styles.listNumberingAuto'), value: 'auto'},
+                {label: $t('styles.listNumberingTemplate'), value: 'template'}
             ],
             booleanOptions: [
                 {label: $t('styles.inherit'), value: null},
@@ -264,7 +269,7 @@ export default {
         // ---- Formatting styles (per template) ----
 
         emptyStyles: function() {
-            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null}
+            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null}
         },
 
         openStyles: function(row) {
@@ -283,6 +288,7 @@ export default {
                 styles.codeBlock = Object.assign({}, saved.codeBlock || {})
                 styles.link = Object.assign({}, saved.link || {})
                 styles.highlightSyntax = (typeof saved.highlightSyntax === 'boolean') ? saved.highlightSyntax : null
+                styles.listNumbering = saved.listNumbering || null
                 this.currentStyles = styles
                 this.$refs.stylesModal.show()
             })
@@ -341,6 +347,7 @@ export default {
                 if (Object.keys(p).length || !this.isDefaultProfile(n)) result.profiles[n] = p
             })
             if (typeof styles.highlightSyntax === 'boolean') result.highlightSyntax = styles.highlightSyntax
+            if (styles.listNumbering) result.listNumbering = styles.listNumbering
             return result
         },
 

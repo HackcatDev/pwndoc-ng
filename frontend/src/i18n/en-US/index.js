@@ -41,6 +41,11 @@ export default {
         addProfile: 'Add profile',
         removeProfile: 'Remove profile',
         badProfileName: 'Profile name: letters, digits, - and _ only (max 32)',
+        lists: 'Lists',
+        listsInfo: 'Automatic: bullet and numbered list definitions are added to the document (each numbered list restarts at 1). Template: use the definitions numId 1 (bullets) and 2 (numbered) of the template numbering.xml.',
+        listNumbering: 'List definitions',
+        listNumberingAuto: 'automatic',
+        listNumberingTemplate: 'from template',
         reset: 'Clear overrides',
         resetTitle: 'Clear formatting overrides',
         resetConfirm: 'All values of this template will be cleared and the deployment defaults will be used. Continue?'

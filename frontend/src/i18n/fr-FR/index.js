@@ -41,6 +41,11 @@ export default {
         addProfile: 'Ajouter un profil',
         removeProfile: 'Supprimer le profil',
         badProfileName: 'Nom de profil : lettres, chiffres, - et _ uniquement (32 max)',
+        lists: 'Listes',
+        listsInfo: 'Automatique : les définitions de listes à puces et numérotées sont ajoutées au document (chaque liste numérotée repart à 1). Modèle : utiliser les définitions numId 1 (puces) et 2 (numérotée) du numbering.xml du modèle.',
+        listNumbering: 'Définitions de listes',
+        listNumberingAuto: 'automatique',
+        listNumberingTemplate: 'depuis le modèle',
         reset: 'Effacer les surcharges',
         resetTitle: 'Effacer les surcharges de mise en forme',
         resetConfirm: 'Toutes les valeurs de ce modèle seront effacées et les valeurs par défaut du déploiement seront utilisées. Continuer ?'

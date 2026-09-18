@@ -300,6 +300,15 @@
 
             <q-separator class="q-my-md" />
 
+            <!-- Lists -->
+            <div class="text-bold q-mb-sm">{{$t('styles.lists')}}</div>
+            <div class="text-grey-8 q-mb-sm">{{$t('styles.listsInfo')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-select class="col-md-4 col-8" dense outlined stack-label :label="$t('styles.listNumbering')" v-model="currentStyles.listNumbering" :options="listNumberingOptions" emit-value map-options options-dense />
+            </div>
+
+            <q-separator class="q-my-md" />
+
             <!-- Links -->
             <div class="text-bold q-mb-sm">{{$t('styles.links')}}</div>
             <div class="row q-col-gutter-sm">

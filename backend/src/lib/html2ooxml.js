@@ -153,6 +153,18 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
   const highlightSyntax = !!styles.highlightSyntax;
   const syntaxColors = styles.syntaxColors || {};
 
+  // Style ids defined by the template (Set); when known, built-in references
+  // to template styles (Code, CodeChar, PwndocLink, ListParagraph, HeadingN)
+  // are only emitted if the template actually defines them: some consumers
+  // (LibreOffice) drop the direct formatting of a paragraph whose style is
+  // unknown. Styles explicitly configured are always emitted.
+  const knownStyles = styles.templateStyleIds instanceof Set ? styles.templateStyleIds
+    : Array.isArray(styles.templateStyleIds) ? new Set(styles.templateStyleIds) : null;
+  function templateStyle(id) {
+    if (!knownStyles) return id;
+    return knownStyles.has(id) ? id : null;
+  }
+
   // Profile selection: `style` is a profile name, otherwise a Word style id.
   let profileName = "text";
   let legacyPStyle = null;
@@ -165,14 +177,14 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
   const captionProfile = profileToProps(profiles.caption);
 
   const inlineCodeRun = {
-    rStyle: inlineCodeCfg.rStyle === undefined ? "CodeChar" : (inlineCodeCfg.rStyle || null),
+    rStyle: inlineCodeCfg.rStyle === undefined ? templateStyle("CodeChar") : (inlineCodeCfg.rStyle || null),
     font: inlineCodeCfg.font || null,
     size: halfPoints(inlineCodeCfg.size),
     color: hexColor(inlineCodeCfg.color),
     shading: hexColor(inlineCodeCfg.shading),
   };
   const codeBlockPara = {
-    pStyle: codeBlockCfg.pStyle === undefined ? "Code" : (codeBlockCfg.pStyle || null),
+    pStyle: codeBlockCfg.pStyle === undefined ? templateStyle("Code") : (codeBlockCfg.pStyle || null),
     shading: hexColor(codeBlockCfg.shading),
   };
   if (codeBlockCfg.spacingBefore !== undefined && codeBlockCfg.spacingBefore !== null && codeBlockCfg.spacingBefore !== "") codeBlockPara.spacingBefore = Number(codeBlockCfg.spacingBefore);
@@ -184,7 +196,7 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
     color: hexColor(codeBlockCfg.color),
   };
   const linkRun = {
-    rStyle: linkCfg.rStyle === undefined ? "PwndocLink" : (linkCfg.rStyle || null),
+    rStyle: linkCfg.rStyle === undefined ? templateStyle("PwndocLink") : (linkCfg.rStyle || null),
     color: hexColor(linkCfg.color),
     underline: linkCfg.underline === undefined ? false : !!linkCfg.underline,
   };
@@ -312,18 +324,20 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
     para.hasText = true;
   }
 
+  const bulletNumId = parseInt(styles.bulletNumId, 10) || BULLET_NUM_ID;
+
   function listLevel() { return Math.min(lists.length - 1, MAX_LIST_LEVEL); }
 
   function openListItemParagraph() {
     const props = Object.assign({}, baseProfile.para);
     delete props.pStyle;
-    props.pStyle = "ListParagraph";
+    props.pStyle = templateStyle("ListParagraph");
     if (lists.length > 0) {
       const list = lists[lists.length - 1];
       props.numbering = { numId: list.numId, level: listLevel() };
     } else {
       // <li> without a parent list: treat as a bullet (historical behaviour)
-      props.numbering = { numId: BULLET_NUM_ID, level: 0 };
+      props.numbering = { numId: bulletNumId, level: 0 };
     }
     openParagraph(props);
   }
@@ -471,7 +485,7 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
         if (openIgnored.length) { openIgnored.push(tag); return; }
         switch (tag) {
           case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
-            openParagraph({ pStyle: "Heading" + tag[1] }, {});
+            openParagraph({ pStyle: templateStyle("Heading" + tag[1]) }, {});
             break;
           case "p":
           case "div": {
@@ -483,7 +497,7 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
             if (blockquoteDepth) props.indentLeft = 720 * blockquoteDepth;
             if (lists.length > 0) {
               // additional paragraph inside a list item: align with the text
-              props.pStyle = "ListParagraph";
+              props.pStyle = templateStyle("ListParagraph");
               props.indentLeft = 720 * (listLevel() + 1);
             }
             openParagraph(props);
@@ -542,7 +556,7 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
           case "ul":
             discardEmptyListParagraph();
             if (para) closeParagraph();
-            lists.push({ type: "bullet", numId: BULLET_NUM_ID });
+            lists.push({ type: "bullet", numId: bulletNumId });
             break;
           case "ol": {
             discardEmptyListParagraph();

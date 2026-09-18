@@ -10,6 +10,7 @@ var utils = require('./utils');
 var html2ooxml = require('./html2ooxml');
 var reportStyles = require('./report-styles');
 var ooxmlPostprocess = require('./ooxml-postprocess');
+var numbering = require('./numbering');
 var _ = require('lodash');
 var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
@@ -28,6 +29,7 @@ var abstractNumCreated = false // Flag to avoid creating abstractNum multiple ti
 var bulletDefinitionCreated = false // Flag to avoid creating bullet definition multiple times
 var globalBulletNumId = null // Global variable to store dynamic bullet ID
 var currentStyles = null // Formatting configuration resolved for the template being rendered
+var numberingCtx = null // List definitions added to the template (null: use the template's numId 1/2)
 
 const encodeHTMLEntities = s => s.replace(/[\u00A0-\u9999<>&]/g, i => '&#'+i.charCodeAt(0)+';')
 
@@ -44,6 +46,22 @@ async function generateDoc(audit) {
     var content = fs.readFileSync(templatePath, "binary");
 
     zip = new PizZip(content);
+
+    // Formatting used by convertHTML: config/report-styles.json overridden by the template settings
+    var templateStyles = audit.template && (typeof audit.template.toObject === 'function' ? audit.template.toObject().styles : audit.template.styles)
+    currentStyles = reportStyles.resolve(templateStyles)
+    currentStyles.templateStyleIds = getTemplateStyleIds(zip)
+
+    // List definitions: self-contained (default) or the template's numId 1 / 2
+    numberingCtx = null
+    if (currentStyles.listNumbering !== 'template') {
+        try {
+            numberingCtx = numbering.prepare(zip)
+            currentStyles.bulletNumId = numberingCtx.bulletNumId
+        } catch (err) {
+            console.log('numbering: cannot prepare list definitions, falling back to template numbering', err)
+        }
+    }
 
     translate.setLocale(audit.language)
     $t = translate.translate
@@ -112,10 +130,6 @@ async function generateDoc(audit) {
     
     customGenerator.apply(preppedAudit);
 
-    // Formatting used by convertHTML: config/report-styles.json overridden by the template settings
-    var templateStyles = audit.template && (typeof audit.template.toObject === 'function' ? audit.template.toObject().styles : audit.template.styles)
-    currentStyles = reportStyles.resolve(templateStyles)
-
     try {
         doc.render(preppedAudit);
     }
@@ -182,6 +196,20 @@ async function generateDoc(audit) {
     return buf;
 }
 exports.generateDoc = generateDoc;
+
+// Style ids defined in the template (word/styles.xml)
+function getTemplateStyleIds(zip) {
+    try {
+        var stylesXml = zip.files['word/styles.xml'].asText()
+        var ids = new Set()
+        var re = /<w:style\b[^>]*\bw:styleId="([^"]+)"/g
+        var m
+        while ((m = re.exec(stylesXml)) !== null) ids.add(m[1])
+        return ids
+    } catch (err) {
+        return null
+    }
+}
 
 // *** Angular parser filters ***
 
@@ -572,7 +600,15 @@ expressions.filters.convertHTML = function(input, style, listIds) {
     }
 
     var styles = currentStyles || reportStyles.resolve()
-    return html2ooxml(String(input).replace(/(<p><\/p>)+$/, ''), style, listIdsArray, { styles: styles })
+    var html = String(input).replace(/(<p><\/p>)+$/, '')
+
+    // One numbering instance per ordered list so that each list restarts at 1
+    if (numberingCtx && listIdsArray.length === 0) {
+        var olCount = (html.match(/<ol[\s>]/g) || []).length
+        for (var i = 0; i < olCount; i++) listIdsArray.push(numbering.allocateOrderedList(zip, numberingCtx))
+    }
+
+    return html2ooxml(html, style, listIdsArray, { styles: styles })
 }
 
 // Fonction pour modifier le numbering.xml du document DOCX
