@@ -18,6 +18,8 @@ This section is about all information relative to the Audit.
 
 It's possible to add Collaborators to an Audit, this will give write access to all Collaborators selected.
 
+The *Findings API key* of the section generates the key that lets a script or an MCP server create and edit the findings of this audit from outside the web interface, see [Findings API](findings-api.md).
+
 ## Network Scan
 
 This section allows to import Nmap/Nessus Scans (only port scan).

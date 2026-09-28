@@ -4,4 +4,5 @@
 - [Vulnerabilities](vulnerabilities.md)
 - [Audits](audits.md)
 - [Docx Template](docxtemplate.md)
+- [Findings API](findings-api.md)
 - [Debug](debug.md)
