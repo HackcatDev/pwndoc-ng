@@ -455,6 +455,29 @@ AuditSchema.statics.getLastFindingIdentifier = (auditId) => {
     })
 };
 
+// Get the findings of an audit, without their content (findings list)
+AuditSchema.statics.getFindings = (isAdmin, auditId, userId) => {
+    return new Promise((resolve, reject) => {
+        var query = Audit.findById(auditId)
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}, {reviewers: userId}])
+        query.select('findings._id findings.identifier findings.title findings.vulnType findings.cvssv3 findings.category findings.status')
+        query.lean().exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+
+            resolve(row.findings || [])
+        })
+        .catch((err) => {
+            if (err.name === "CastError")
+                reject({fn: 'BadParameters', message: 'Bad Audit Id'})
+            else
+                reject(err)
+        })
+    })
+}
+
 // Get finding of audit
 AuditSchema.statics.getFinding = (isAdmin, auditId, userId, findingId) => {
     return new Promise((resolve, reject) => { 

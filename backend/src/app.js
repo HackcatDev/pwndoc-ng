@@ -90,8 +90,8 @@ io.on('connection', (socket) => {
 // CORS
 app.use(function(req, res, next) {
   // res.header("Access-Control-Allow-Origin", req.headers.origin);
-  res.header("Access-Control-Allow-Methods", "GET,POST,DELETE,PUT,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,PUT,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, X-API-Key, Authorization");
   res.header('Access-Control-Expose-Headers', 'Content-Disposition')
   // res.header('Access-Control-Allow-Credentials', 'true')
   next();
@@ -108,6 +108,7 @@ app.use(cookieParser())
 // Routes import
 require('./routes/user')(app);
 require('./routes/audit')(app, io);
+require('./routes/audit-api')(app, io);
 require('./routes/client')(app);
 require('./routes/company')(app);
 require('./routes/vulnerability')(app);
