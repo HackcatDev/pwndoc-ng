@@ -33,6 +33,14 @@ export default {
     return  api.put(`audits/${auditId}/general`, audit)
   },
 
+  getAuditApiKey: function(auditId) {
+    return  api.get(`audits/${auditId}/apikey`)
+  },
+
+  regenerateAuditApiKey: function(auditId) {
+    return  api.post(`audits/${auditId}/apikey`)
+  },
+
   getAuditNetwork: function(auditId) {
     return  api.get(`audits/${auditId}/network`)
   },

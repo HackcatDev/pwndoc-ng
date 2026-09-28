@@ -12,6 +12,9 @@ export default {
     },
     btn: {
         cancel: 'Cancel',
+        copy: 'Copy',
+        generate: 'Generate',
+        regenerate: 'Regenerate',
         confirm: 'Confirm',
         create: 'Create',
         topButtonSection: {
@@ -55,6 +58,10 @@ export default {
     },
     msg: {
         auditReviewUpdateOk: 'Audit review status updated successfully',
+        apiKeyGenerated: 'API key generated, the previous one no longer works',
+        apiKeyCopied: 'API key copied to the clipboard',
+        apiKeyRegenerateTitle: 'Generate a new API key?',
+        apiKeyRegenerateConfirm: 'The current key will stop working immediately. Any script or MCP server using it will have to be updated with the new key.',
         auditApprovalUpdateOk: 'Audit approval updated successfully',
         auditUpdateOk: 'Audit updated successfully',
         findingCreateOk: 'Finding created successfully',
@@ -367,6 +374,10 @@ export default {
     description: 'Description',
     observation: 'Observation',
     references: 'References (One per line)',
+    apiKey: 'Findings API key',
+    apiKeyInfo: 'Allows a script or an MCP server to create and edit the findings of this audit only, over /api/v1 with the X-API-Key header. Generating a new key revokes the previous one.',
+    apiKeyNone: 'No key generated yet',
+    apiKeyCreatedAt: 'Generated on',
     customFields: 'Custom Fields',
     affectedAssets: 'Affected Assets',
     courseOfActions: 'Course of actions',

@@ -12,6 +12,9 @@ export default {
     },
     btn: {
         cancel: 'Annuler',
+        copy: 'Copier',
+        generate: 'Générer',
+        regenerate: 'Régénérer',
         confirm: 'Confirmer',
         create: 'Créer',
         topButtonSection: {
@@ -51,6 +54,10 @@ export default {
     },
     msg: {
         auditReviewUpdateOk: 'État de l\'examin d\'audit mis à jour avec succès',
+        apiKeyGenerated: 'Clé API générée, la précédente ne fonctionne plus',
+        apiKeyCopied: 'Clé API copiée dans le presse-papiers',
+        apiKeyRegenerateTitle: 'Générer une nouvelle clé API ?',
+        apiKeyRegenerateConfirm: 'La clé actuelle cessera immédiatement de fonctionner. Tout script ou serveur MCP qui l\'utilise devra être mis à jour avec la nouvelle clé.',
         auditApprovalUpdateOk: 'L\'approbation de l\'audit a été mise à jour avec succès',
         auditUpdateOk: 'Audit mis à jour avec succès',
         findingCreateOk: 'Découverte créée avec succès',
@@ -250,6 +257,10 @@ export default {
     description: 'Description',
     observation: 'Observation',
     references: 'Références (Une par ligne)',
+    apiKey: 'Clé API des vulnérabilités',
+    apiKeyInfo: 'Permet à un script ou à un serveur MCP de créer et de modifier les vulnérabilités de cet audit uniquement, via /api/v1 et l\'en-tête X-API-Key. Générer une nouvelle clé révoque la précédente.',
+    apiKeyNone: 'Aucune clé générée',
+    apiKeyCreatedAt: 'Générée le',
     customFields: 'Champs Personnalisés',
     affectedAssets: 'Actifs Impactés',
     courseOfActions: 'Plan d\'action',

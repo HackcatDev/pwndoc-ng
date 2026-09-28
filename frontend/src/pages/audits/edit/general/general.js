@@ -1,5 +1,5 @@
 import { nextTick } from 'vue';
-import { Notify, Dialog } from 'quasar';
+import { Notify, Dialog, copyToClipboard } from 'quasar';
 
 import Breadcrumb from 'components/breadcrumb';
 import TextareaArray from 'components/textarea-array'
@@ -68,6 +68,10 @@ export default {
             auditTypes: [],
             // List of CustomFields
             customFields: [],
+            // Key of the findings API, for this audit only
+            apiKey: null,
+            apiKeyCreatedAt: null,
+            apiKeyVisible: false,
             AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE
         }
     },
@@ -84,6 +88,7 @@ export default {
         this.getTemplates();
         this.getLanguages();
         this.getAuditTypes();
+        this.getApiKey();
 
         this.$socket.emit('menu', {menu: 'general', room: this.auditId});
 
@@ -183,6 +188,69 @@ export default {
             }).catch((err) => {
                 console.error('Error in updateAuditGeneral nextTick:', err);
             })
+        },
+
+        // Get the findings API key of the audit (null when none was generated)
+        getApiKey: function() {
+            AuditService.getAuditApiKey(this.auditId)
+            .then((data) => {
+                this.apiKey = data.data.datas.apiKey;
+                this.apiKeyCreatedAt = data.data.datas.apiKeyCreatedAt;
+            })
+            .catch((err) => {
+                console.log(err)
+            })
+        },
+
+        // Generate a key, revoking the previous one
+        regenerateApiKey: function() {
+            var generate = () => {
+                AuditService.regenerateAuditApiKey(this.auditId)
+                .then((data) => {
+                    this.apiKey = data.data.datas.apiKey;
+                    this.apiKeyCreatedAt = data.data.datas.apiKeyCreatedAt;
+                    this.apiKeyVisible = true;
+                    Notify.create({
+                        message: $t('msg.apiKeyGenerated'),
+                        color: 'positive',
+                        textColor:'white',
+                        position: 'top-right'
+                    })
+                })
+                .catch((err) => {
+                    Notify.create({
+                        message: err.response.data.datas,
+                        color: 'negative',
+                        textColor:'white',
+                        position: 'top-right'
+                    })
+                })
+            }
+
+            if (!this.apiKey) {
+                generate()
+                return
+            }
+            Dialog.create({
+                title: $t('msg.apiKeyRegenerateTitle'),
+                message: $t('msg.apiKeyRegenerateConfirm'),
+                ok: {label: $t('btn.confirm'), color: 'negative'},
+                cancel: {label: $t('btn.cancel'), color: 'white'}
+            })
+            .onOk(() => generate())
+        },
+
+        copyApiKey: function() {
+            copyToClipboard(this.apiKey)
+            .then(() => {
+                Notify.create({
+                    message: $t('msg.apiKeyCopied'),
+                    color: 'positive',
+                    textColor:'white',
+                    position: 'top-right'
+                })
+            })
+            .catch(() => {})
         },
 
         // Get Clients list

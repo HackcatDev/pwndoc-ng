@@ -201,6 +201,45 @@
             <q-card-section>
                 <textarea-array :label="$t('auditScope')" v-model="audit.scope" no-empty-line :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"/>
             </q-card-section>
+
+            <q-card-section>
+                <div class="text-subtitle2">{{$t('apiKey')}}</div>
+                <div class="text-caption text-grey-7 q-mb-sm">{{$t('apiKeyInfo')}}</div>
+                <div class="row q-col-gutter-sm items-center">
+                    <q-input
+                    class="col"
+                    :model-value="apiKey || ''"
+                    :type="apiKeyVisible ? 'text' : 'password'"
+                    :placeholder="$t('apiKeyNone')"
+                    readonly
+                    outlined
+                    dense
+                    >
+                        <template v-slot:append>
+                            <q-icon
+                            v-if="apiKey"
+                            :name="apiKeyVisible ? 'visibility_off' : 'visibility'"
+                            class="cursor-pointer"
+                            @click="apiKeyVisible = !apiKeyVisible"
+                            />
+                            <q-icon v-if="apiKey" name="content_copy" class="cursor-pointer q-ml-sm" @click="copyApiKey">
+                                <q-tooltip>{{$t('btn.copy')}}</q-tooltip>
+                            </q-icon>
+                        </template>
+                    </q-input>
+                    <div class="col-auto">
+                        <q-btn
+                        :color="apiKey ? 'negative' : 'positive'"
+                        :label="apiKey ? $t('btn.regenerate') : $t('btn.generate')"
+                        no-caps
+                        @click="regenerateApiKey"
+                        />
+                    </div>
+                </div>
+                <div v-if="apiKeyCreatedAt" class="text-caption text-grey-7 q-mt-xs">
+                    {{$t('apiKeyCreatedAt')}} {{new Date(apiKeyCreatedAt).toLocaleString()}}
+                </div>
+            </q-card-section>
             <q-expansion-item 
             :label="$t('customFields')"
             v-if="audit.customFields && audit.customFields.length > 0"
