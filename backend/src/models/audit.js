@@ -77,6 +77,10 @@ var AuditSchema = new Schema({
     sortFindings:       [SortOption],
     state:              { type: String, enum: ['EDIT', 'REVIEW', 'APPROVED'], default: 'EDIT'},
     approvals:          [{type: Schema.Types.ObjectId, ref: 'User'}],
+    // Key of the findings API, scoped to this audit only (see routes/audit-api.js).
+    // Never selected by default so that it cannot leak through the other queries.
+    apiKey:             {type: String, select: false, index: true, sparse: true, unique: true},
+    apiKeyCreatedAt:    {type: Date, select: false},
 }, {timestamps: true});
 
 /*
@@ -861,6 +865,76 @@ AuditSchema.statics.clone = (auditId, newName, userId) => {
             reject(err);
         })
     });
+}
+
+// Get the findings API key of an audit (null when none has been generated)
+AuditSchema.statics.getApiKey = (isAdmin, auditId, userId) => {
+    return new Promise((resolve, reject) => {
+        var query = Audit.findById(auditId)
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}])
+        query.select('+apiKey +apiKeyCreatedAt')
+        query.lean().exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+
+            resolve({apiKey: row.apiKey || null, apiKeyCreatedAt: row.apiKeyCreatedAt || null})
+        })
+        .catch((err) => {
+            if (err.name === "CastError")
+                reject({fn: 'BadParameters', message: 'Bad Audit Id'})
+            else
+                reject(err)
+        })
+    })
+}
+
+// Generate a new findings API key for an audit, revoking the previous one
+AuditSchema.statics.regenerateApiKey = (isAdmin, auditId, userId) => {
+    return new Promise((resolve, reject) => {
+        var apiKey = `pwndoc_${require('crypto').randomBytes(32).toString('hex')}`
+        var apiKeyCreatedAt = new Date()
+
+        var query = Audit.findByIdAndUpdate(auditId, {apiKey: apiKey, apiKeyCreatedAt: apiKeyCreatedAt})
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}])
+        query.exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+
+            resolve({apiKey: apiKey, apiKeyCreatedAt: apiKeyCreatedAt})
+        })
+        .catch((err) => {
+            if (err.name === "CastError")
+                reject({fn: 'BadParameters', message: 'Bad Audit Id'})
+            else
+                reject(err)
+        })
+    })
+}
+
+// Get the audit a findings API key belongs to (without its findings)
+AuditSchema.statics.getByApiKey = (apiKey) => {
+    return new Promise((resolve, reject) => {
+        if (!apiKey || typeof apiKey !== 'string') {
+            reject({fn: 'Unauthorized', message: 'Invalid API key'})
+            return
+        }
+        var query = Audit.findOne({apiKey: apiKey})
+        query.select('name language auditType state')
+        query.lean().exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'Unauthorized', message: 'Invalid API key'})
+
+            resolve(row)
+        })
+        .catch((err) => {
+            reject(err)
+        })
+    })
 }
 
 /*

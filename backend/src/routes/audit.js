@@ -227,6 +227,26 @@ module.exports = function(app, io) {
         .catch(err => Response.Internal(res, err))
     });
 
+    // Get the findings API key of the audit
+    // The key allows creating and editing the findings of this audit only, so it
+    // requires the permission to update the audit rather than to read it.
+    app.get("/api/audits/:auditId/apikey", acl.hasPermission('audits:update'), function(req, res) {
+        // #swagger.tags = ['Audit']
+
+        Audit.getApiKey(acl.isAllowed(req.decodedToken.role, 'audits:update-all'), req.params.auditId, req.decodedToken.id)
+        .then(msg => Response.Ok(res, msg))
+        .catch(err => Response.Internal(res, err))
+    });
+
+    // Generate a new findings API key, revoking the previous one
+    app.post("/api/audits/:auditId/apikey", acl.hasPermission('audits:update'), function(req, res) {
+        // #swagger.tags = ['Audit']
+
+        Audit.regenerateApiKey(acl.isAllowed(req.decodedToken.role, 'audits:update-all'), req.params.auditId, req.decodedToken.id)
+        .then(msg => Response.Ok(res, msg))
+        .catch(err => Response.Internal(res, err))
+    });
+
     // Get audit network information
     app.get("/api/audits/:auditId/network", acl.hasPermission('audits:read'), function(req, res) {
         // #swagger.tags = ['Audit']
