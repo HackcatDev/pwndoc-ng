@@ -12,6 +12,7 @@ const doc = {
 const outputFile = './src/config/swagger-output.json';
 const endpointsFiles = [
     './src/routes/audit.js',
+    './src/routes/audit-api.js',
     './src/routes/client.js',
     './src/routes/company.js',
     './src/routes/data.js',

@@ -54,6 +54,45 @@
         "responses": {}
       }
     },
+    "/api/audits/export": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/audits/{auditId}/clone": {
+      "post": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "example": "any"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {}
+      }
+    },
     "/api/audits/{auditId}": {
       "delete": {
         "tags": [
@@ -129,9 +168,6 @@
                 "name": {
                   "example": "any"
                 },
-                "location": {
-                  "example": "any"
-                },
                 "date": {
                   "example": "any"
                 },
@@ -161,6 +197,38 @@
                 }
               }
             }
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/api/audits/{auditId}/apikey": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {}
+      },
+      "post": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
           }
         ],
         "responses": {}
@@ -577,6 +645,75 @@
         "responses": {}
       }
     },
+    "/api/v1/audit": {
+      "get": {
+        "tags": [
+          "Findings API"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/v1/findings": {
+      "get": {
+        "tags": [
+          "Findings API"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      },
+      "post": {
+        "tags": [
+          "Findings API"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/v1/findings/{findingId}": {
+      "get": {
+        "tags": [
+          "Findings API"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {}
+      },
+      "patch": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {}
+      },
+      "put": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {}
+      }
+    },
     "/api/clients": {
       "get": {
         "tags": [
@@ -598,6 +735,9 @@
             "schema": {
               "type": "object",
               "properties": {
+                "length": {
+                  "example": "any"
+                },
                 "email": {
                   "example": "any"
                 },
@@ -623,6 +763,24 @@
             }
           }
         ],
+        "responses": {}
+      },
+      "delete": {
+        "tags": [
+          "Client"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/clients/export": {
+      "get": {
+        "tags": [
+          "Client"
+        ],
+        "description": "",
+        "parameters": [],
         "responses": {}
       }
     },
@@ -709,10 +867,22 @@
             "schema": {
               "type": "object",
               "properties": {
+                "length": {
+                  "example": "any"
+                },
                 "name": {
                   "example": "any"
                 },
                 "shortName": {
+                  "example": "any"
+                },
+                "address": {
+                  "example": "any"
+                },
+                "postalCode": {
+                  "example": "any"
+                },
+                "city": {
                   "example": "any"
                 },
                 "logo": {
@@ -722,6 +892,24 @@
             }
           }
         ],
+        "responses": {}
+      },
+      "delete": {
+        "tags": [
+          "Company"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/companies/export": {
+      "get": {
+        "tags": [
+          "Company"
+        ],
+        "description": "",
+        "parameters": [],
         "responses": {}
       }
     },
@@ -748,6 +936,15 @@
                   "example": "any"
                 },
                 "shortName": {
+                  "example": "any"
+                },
+                "address": {
+                  "example": "any"
+                },
+                "postalCode": {
+                  "example": "any"
+                },
+                "city": {
                   "example": "any"
                 },
                 "logo": {
@@ -1473,6 +1670,45 @@
         "responses": {}
       }
     },
+    "/api/templates/styles/defaults": {
+      "get": {
+        "tags": [
+          "Templates"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/templates/{templateId}/styles": {
+      "put": {
+        "tags": [
+          "Templates"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "styles": {
+                  "example": "any"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {}
+      }
+    },
     "/api/templates/{templateId}": {
       "put": {
         "tags": [
@@ -1495,10 +1731,10 @@
                 "name": {
                   "example": "any"
                 },
-                "file": {
+                "ext": {
                   "example": "any"
                 },
-                "ext": {
+                "file": {
                   "example": "any"
                 }
               }
@@ -1647,6 +1883,9 @@
             "schema": {
               "type": "object",
               "properties": {
+                "length": {
+                  "example": "any"
+                },
                 "username": {
                   "example": "any"
                 },
@@ -1672,6 +1911,16 @@
             }
           }
         ],
+        "responses": {}
+      }
+    },
+    "/api/users/export": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "description": "",
+        "parameters": [],
         "responses": {}
       }
     },
