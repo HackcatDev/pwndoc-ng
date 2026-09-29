@@ -194,6 +194,12 @@
                 },
                 "customFields": {
                   "example": "any"
+                },
+                "aiEnabled": {
+                  "example": "any"
+                },
+                "aiPrompts": {
+                  "example": "any"
                 }
               }
             }
@@ -709,6 +715,95 @@
             "in": "path",
             "required": true,
             "type": "string"
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/api/ai/status": {
+      "get": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/ai/config": {
+      "get": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      },
+      "put": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [],
+        "responses": {}
+      }
+    },
+    "/api/ai/test": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "clearApiKey": {
+                  "example": "any"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/api/audits/{auditId}/findings/{findingId}/ai": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "req": {
+                  "example": "any"
+                },
+                "finding": {
+                  "example": "any"
+                }
+              }
+            }
           }
         ],
         "responses": {}

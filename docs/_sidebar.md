@@ -5,4 +5,5 @@
 - [Audits](audits.md)
 - [Docx Template](docxtemplate.md)
 - [Findings API](findings-api.md)
+- [AI assistant](ai.md)
 - [Debug](debug.md)
