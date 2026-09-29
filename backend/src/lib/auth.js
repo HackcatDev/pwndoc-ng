@@ -73,7 +73,9 @@ var builtInRoles = {
             // Custom Fields
             'custom-fields:read',
             // Settings
-            'settings:read-public'
+            'settings:read-public',
+            // AI assistant of the finding editor
+            'ai:generate'
         ]
     },
     admin: {

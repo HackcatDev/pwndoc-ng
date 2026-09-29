@@ -81,6 +81,10 @@ var AuditSchema = new Schema({
     // Never selected by default so that it cannot leak through the other queries.
     apiKey:             {type: String, select: false, index: true, sparse: true, unique: true},
     apiKeyCreatedAt:    {type: Date, select: false},
+    // AI assistant of the finding editor (see routes/ai.js): enabled per audit,
+    // with prompts overriding the global ones by field key
+    aiEnabled:          {type: Boolean, default: false},
+    aiPrompts:          {type: Schema.Types.Mixed, default: {}},
 }, {timestamps: true});
 
 /*
@@ -318,7 +322,7 @@ AuditSchema.statics.getGeneral = (isAdmin, auditId, userId) => {
         query.populate('collaborators', 'username firstname lastname')
         query.populate('reviewers', 'username firstname lastname')
         query.populate('company')
-        query.select('name auditType date date_start date_end client collaborators language scope.name template customFields')
+        query.select('name auditType date date_start date_end client collaborators language scope.name template customFields aiEnabled aiPrompts')
         query.lean().exec()
         .then((row) => {
             if (!row)
@@ -875,6 +879,8 @@ AuditSchema.statics.clone = (auditId, newName, userId) => {
                 sections: sourceAudit.sections,
                 customFields: sourceAudit.customFields,
                 sortFindings: sourceAudit.sortFindings,
+                aiEnabled: sourceAudit.aiEnabled,
+                aiPrompts: sourceAudit.aiPrompts,
                 creator: userId,
                 state: 'EDIT' // Reset state to EDIT for new audit
             });
@@ -888,6 +894,31 @@ AuditSchema.statics.clone = (auditId, newName, userId) => {
             reject(err);
         })
     });
+}
+
+// Everything the AI assistant needs from an audit, for its creator and collaborators
+AuditSchema.statics.getAiContext = (isAdmin, auditId, userId) => {
+    return new Promise((resolve, reject) => {
+        var query = Audit.findById(auditId)
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}])
+        query.populate('company', 'name')
+        query.populate('client', 'firstname lastname email')
+        query.populate('findings.customFields.customField', 'label fieldType')
+        query.select('name auditType language date_start date_end scope.name state aiEnabled aiPrompts findings')
+        query.lean().exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+            resolve(row)
+        })
+        .catch((err) => {
+            if (err.name === "CastError")
+                reject({fn: 'BadParameters', message: 'Bad Audit Id'})
+            else
+                reject(err)
+        })
+    })
 }
 
 // Get the findings API key of an audit (null when none has been generated)

@@ -49,6 +49,7 @@ require('./models/custom-section');
 require('./models/custom-field');
 require('./models/image');
 require('./models/settings');
+require('./models/ai-config');
 
 // Socket IO configuration
 io.on('connection', (socket) => {
@@ -117,6 +118,7 @@ require('./routes/vulnerability')(app);
 require('./routes/data')(app);
 require('./routes/image')(app);
 require('./routes/settings')(app);
+require('./routes/ai')(app);
 
 const { cronJobs } = require('./lib/cron');
 cronJobs();

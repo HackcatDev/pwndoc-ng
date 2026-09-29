@@ -217,6 +217,15 @@ module.exports = function(app, io) {
         }
         if (req.body.template) update.template = req.body.template;
         if (req.body.customFields) update.customFields = req.body.customFields;
+        if (typeof req.body.aiEnabled === 'boolean') update.aiEnabled = req.body.aiEnabled;
+        if (req.body.aiPrompts !== undefined) {
+            var promptErrors = []
+            update.aiPrompts = require('../lib/ai').parsePrompts(req.body.aiPrompts, promptErrors)
+            if (promptErrors.length) {
+                Response.BadParameters(res, promptErrors.join(', '));
+                return;
+            }
+        }
         if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) update.approvals = [];
 
         Audit.updateGeneral(acl.isAllowed(req.decodedToken.role, 'audits:update-all'), req.params.auditId, req.decodedToken.id, update)
