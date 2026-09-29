@@ -76,8 +76,12 @@
                   stack-label
                   v-model="finding.title"
                   outlined
-                  :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
-                />
+                  :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || !!aiBusy.title"
+                >
+                  <template v-slot:after v-if="aiAvailable">
+                    <ai-button :loading="!!aiBusy.title" @click="aiGenerate('title')" />
+                  </template>
+                </q-input>
                 <q-select
                   class="col-md-4 col-12"
                   :label="$t('type')"
@@ -103,8 +107,11 @@
                       v-on:ready="readyToSave = true"
                       idUnique="basiceditor_description"
                       noSync
-                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT && !aiBusy.description"
                     />
+                  </template>
+                  <template v-slot:after v-if="aiAvailable">
+                    <ai-button :loading="!!aiBusy.description" @click="aiGenerate('description')" />
                   </template>
                 </q-field>
                 <q-field class="col-md-12 basic-editor" borderless :label="$t('observation')" stack-label>
@@ -115,16 +122,24 @@
                       v-on:editorchange="readyToSave ? needSave = true : null"
                       idUnique="basiceditor_observation"
                       noSync
-                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT && !aiBusy.observation"
                     />
                   </template>
+                  <template v-slot:after v-if="aiAvailable">
+                    <ai-button :loading="!!aiBusy.observation" @click="aiGenerate('observation')" />
+                  </template>
                 </q-field>
-                <textarea-array
-                  class="col-12"
-                  :label="$t('references')"
-                  v-model="finding.references"
-                  :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
-                />
+                <div class="col-12 row no-wrap items-start">
+                  <textarea-array
+                    class="col"
+                    :label="$t('references')"
+                    v-model="finding.references"
+                    :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || !!aiBusy.references"
+                  />
+                  <div class="col-auto q-pl-xs q-pt-sm" v-if="aiAvailable">
+                    <ai-button :loading="!!aiBusy.references" @click="aiGenerate('references')" />
+                  </div>
+                </div>
               </q-card-section>
   
               <q-expansion-item
@@ -142,6 +157,9 @@
               :idUnique="finding._id"
               custom-element="QCardSection"
               :locale="audit?.language || 'en'"
+              :ai-fields="aiCustomFields"
+              :ai-busy="aiBusy"
+              @ai="aiGenerate($event.key, $event.fieldId)"
             />
 
 
@@ -245,8 +263,11 @@
                       v-on:editorchange="readyToSave ? needSave = true : null"
                       idUnique="basiceditor_remediation"
                       noSync
-                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT && !aiBusy.remediation"
                     />
+                  </template>
+                  <template v-slot:after v-if="aiAvailable">
+                    <ai-button :loading="!!aiBusy.remediation" @click="aiGenerate('remediation')" />
                   </template>
                 </q-field>
               </q-card-section>
@@ -254,6 +275,27 @@
           </q-tab-panel>
         </q-tab-panels>
       </div>
-    </div>
+    
+    <!-- AI assistant: new title to compare with the current one -->
+    <q-dialog v-model="aiTitle.show">
+      <q-card style="width: 700px; max-width: 90vw">
+        <q-bar class="bg-fixed-primary text-white">
+          <q-icon name="fa fa-magic" />
+          <div class="q-toolbar-title">{{ $t('ai.titleDialog') }}</div>
+          <q-space />
+          <q-btn dense flat icon="close" v-close-popup />
+        </q-bar>
+        <q-card-section>
+          <div class="text-caption text-grey-7">{{ $t('ai.titleCurrent') }}</div>
+          <div class="q-mb-md text-body1">{{ aiTitle.current }}</div>
+          <q-input outlined autogrow stack-label :label="$t('ai.titleProposed') + (aiTitle.model ? ' (' + aiTitle.model + ')' : '')" v-model="aiTitle.proposed" autofocus />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat color="primary" no-caps :label="$t('btn.cancel')" v-close-popup />
+          <q-btn unelevated color="secondary" no-caps :label="$t('ai.replace')" :disable="!aiTitle.proposed.trim()" @click="aiReplaceTitle()" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+</div>
   </template>
   

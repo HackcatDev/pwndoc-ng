@@ -6,8 +6,10 @@ import Breadcrumb from 'components/breadcrumb';
 import CvssCalculator from 'components/cvsscalculator';
 import TextareaArray from 'components/textarea-array';
 import CustomFields from 'components/custom-fields';
+import AiButton from 'components/ai-button';
 
 import AuditService from '@/services/audit';
+import AiService from '@/services/ai';
 import DataService from '@/services/data';
 import VulnService from '@/services/vulnerability';
 import Utils from '@/services/utils';
@@ -48,6 +50,10 @@ export default {
       readyToSave: false,
       needSave: false,
       AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE,
+      // AI assistant: global status (null when not allowed), fields being generated
+      aiStatus: null,
+      aiBusy: {},
+      aiTitle: { show: false, current: '', proposed: '', model: '' },
     };
   },
 
@@ -57,6 +63,7 @@ export default {
     CvssCalculator,
     TextareaArray,
     CustomFields,
+    AiButton,
   },
 
   mounted() {
@@ -67,6 +74,7 @@ export default {
     })
     this.getAudit();
     this.getVulnTypes();
+    this.getAiStatus();
     
 
     this.$socket.emit('menu', {
@@ -108,6 +116,17 @@ export default {
   },
 
   computed: {
+    // The buttons of the assistant: configured, enabled for the audit, editable
+    aiAvailable() {
+      return !!(this.aiStatus && this.aiStatus.configured &&
+        this.localAudit && this.localAudit.aiEnabled &&
+        this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT);
+    },
+    aiCustomFields() {
+      if (!this.aiAvailable) return [];
+      const builtin = ['title', 'description', 'observation', 'references', 'remediation'];
+      return this.aiStatus.fields.map((f) => f.key).filter((key) => !builtin.includes(key));
+    },
     vulnTypesLang() {
       return this.vulnTypes.filter(
         (type) => type.locale === this.localAudit.language
@@ -294,6 +313,118 @@ export default {
 
     syncEditors() {
       Utils.syncEditors(this.$refs);
+    },
+
+    // *** AI assistant ***
+
+    getAiStatus() {
+      AiService.getStatus()
+        .then((data) => {
+          this.aiStatus = data.data.datas;
+        })
+        .catch(() => {
+          this.aiStatus = null;
+        });
+    },
+
+    aiFieldLabel(key) {
+      const field = this.aiStatus && this.aiStatus.fields.find((f) => f.key === key);
+      return field ? field.label : key;
+    },
+
+    // Sends the values the editor holds (saved or not) and inserts the answer
+    aiGenerate(key, customFieldId) {
+      if (this.aiBusy[key]) return;
+      Utils.syncEditors(this.$refs);
+      this.aiBusy[key] = true;
+      AiService.generate(this.auditId, this.findingId, key, this.finding)
+        .then((data) => {
+          this.aiApply(key, customFieldId, data.data.datas);
+        })
+        .catch((err) => {
+          const detail = (err.response && err.response.data && err.response.data.datas) || err.message || String(err);
+          Notify.create({
+            message: `${$t('ai.error')} (${this.aiFieldLabel(key)}): ${detail}`,
+            color: 'negative',
+            textColor: 'white',
+            position: 'top-right',
+            timeout: 10000,
+            multiLine: true,
+            actions: [{ icon: 'close', color: 'white', round: true }],
+          });
+        })
+        .finally(() => {
+          delete this.aiBusy[key];
+        });
+    },
+
+    // Separator between the current text and the new one, which is added at the
+    // end of the field so that both can be compared and merged by hand
+    aiSeparator(model) {
+      return `--------------------------------------------- AI: ${model || ''}`.trim();
+    },
+
+    aiApply(key, customFieldId, result) {
+      const separator = this.aiSeparator(result.model);
+      const separatorHtml = `<p>${Utils.htmlEncode(separator)}</p>`;
+
+      if (result.kind === 'text') {
+        const current = (this.finding.title || '').trim();
+        if (!current) {
+          this.finding.title = result.value;
+          this.aiDone(key, result);
+          return;
+        }
+        this.aiTitle = { show: true, current: current, proposed: result.value, model: result.model };
+        return;
+      }
+
+      if (result.kind === 'lines') {
+        const current = (this.finding.references || []).filter((line) => line && line.trim());
+        this.finding.references = current.length ? current.concat([separator], result.value) : result.value.slice();
+        this.aiDone(key, result);
+        return;
+      }
+
+      let inserted = false;
+      if (customFieldId) {
+        inserted = this.$refs.customfields ? this.$refs.customfields.aiInsert(customFieldId, result.value, separatorHtml) : false;
+      } else {
+        const editor = this.$refs[`basiceditor_${key}`];
+        inserted = editor ? editor.aiInsert(result.value, separatorHtml) : false;
+        if (!inserted) {
+          // editor not displayed: change the value, the editor loads it when shown
+          const current = this.finding[key] || '';
+          this.finding[key] = current ? current + separatorHtml + result.value : result.value;
+          inserted = true;
+        }
+      }
+      if (!inserted) {
+        Notify.create({
+          message: `${$t('ai.error')} (${this.aiFieldLabel(key)}): ${$t('ai.cannotInsert')}`,
+          color: 'negative',
+          textColor: 'white',
+          position: 'top-right',
+        });
+        return;
+      }
+      this.aiDone(key, result);
+    },
+
+    aiDone(key, result) {
+      this.needSave = true;
+      Notify.create({
+        message: $t('ai.inserted', [this.aiFieldLabel(key), result.model]),
+        color: 'positive',
+        textColor: 'white',
+        position: 'top-right',
+      });
+    },
+
+    aiReplaceTitle() {
+      this.finding.title = this.aiTitle.proposed.trim();
+      this.aiTitle.show = false;
+      this.aiDone('title', { model: this.aiTitle.model });
     },
     backupFinding: function() {
         Utils.syncEditors(this.$refs)

@@ -1107,6 +1107,21 @@ export default defineComponent({
       }
       return document.createTextNode('');
     },
+    // AI assistant: adds content at the end of the document, after a separator
+    // when the editor already holds text, so that nothing written is lost.
+    // Goes through the editor commands (not the v-model) so that the
+    // collaborative document gets it too.
+    aiInsert(html, separatorHtml) {
+      if (!this.editor) return false;
+      if (this.editor.isEmpty) {
+        this.editor.commands.setContent(html, true);
+      } else {
+        const end = this.editor.state.doc.content.size;
+        this.editor.chain().insertContentAt(end, (separatorHtml || '') + html).run();
+      }
+      this.updateHTML();
+      return true;
+    },
     updateHTML() {
       if (!this.initialeDataUpdated) return;
       this.json = this.editor.getJSON();

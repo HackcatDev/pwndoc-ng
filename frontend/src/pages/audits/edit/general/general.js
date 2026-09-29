@@ -3,9 +3,11 @@ import { Notify, Dialog, copyToClipboard } from 'quasar';
 
 import Breadcrumb from 'components/breadcrumb';
 import TextareaArray from 'components/textarea-array'
+import AiPrompts from 'components/ai-prompts'
 import CustomFields from 'components/custom-fields'
 
 import AuditService from '@/services/audit';
+import AiService from '@/services/ai';
 import ClientService from '@/services/client';
 import CompanyService from '@/services/company';
 import CollabService from '@/services/collaborator';
@@ -72,6 +74,8 @@ export default {
             apiKey: null,
             apiKeyCreatedAt: null,
             apiKeyVisible: false,
+            // AI assistant: status of the global configuration (null: not allowed)
+            aiStatus: null,
             AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE
         }
     },
@@ -79,7 +83,8 @@ export default {
     components: {
         Breadcrumb,
         TextareaArray,
-        CustomFields
+        CustomFields,
+        AiPrompts
     },
 
     mounted: function() {
@@ -89,6 +94,7 @@ export default {
         this.getLanguages();
         this.getAuditTypes();
         this.getApiKey();
+        this.getAiStatus();
 
         this.$socket.emit('menu', {menu: 'general', room: this.auditId});
 
@@ -113,6 +119,18 @@ export default {
                 cancel: {label: $t('btn.cancel'), color: 'white'}
             })
             .onOk(() => next())
+        }
+    },
+    computed: {
+        // What an empty override inherits: the global prompt, else the built-in one
+        aiBasePrompts: function() {
+            var result = {}
+            if (!this.aiStatus) return result
+            this.aiStatus.fields.forEach(f => {
+                var prompt = (this.aiStatus.prompts || {})[f.key]
+                result[f.key] = (prompt && prompt.trim()) ? prompt : (this.aiStatus.defaultPrompts || {})[f.key]
+            })
+            return result
         }
     },
     watch: {
@@ -144,6 +162,8 @@ export default {
             })
             .then((data) => {
                 this.audit = data.data.datas;
+                this.audit.aiEnabled = !!this.audit.aiEnabled;
+                this.audit.aiPrompts = this.audit.aiPrompts || {};
                 this.auditOrig = this.$_.cloneDeep(this.audit);
                 this.getCollaborators();
                 this.getReviewers();
@@ -187,6 +207,17 @@ export default {
                 })
             }).catch((err) => {
                 console.error('Error in updateAuditGeneral nextTick:', err);
+            })
+        },
+
+        // Global AI configuration: fields, prompts and placeholders (hidden when not allowed)
+        getAiStatus: function() {
+            AiService.getStatus()
+            .then((data) => {
+                this.aiStatus = data.data.datas
+            })
+            .catch(() => {
+                this.aiStatus = null
             })
         },
 

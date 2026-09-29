@@ -45,6 +45,12 @@
                 </q-item-section>
                 <q-item-section>{{$t('import')}} / {{$t('export')}}</q-item-section>
             </q-item>
+            <q-item to='/data/ai' v-if="UserService.isAllowed('ai:update')">
+                <q-item-section avatar>
+                    <q-icon name="fa fa-magic" />
+                </q-item-section>
+                <q-item-section>{{$t('ai.integration')}}</q-item-section>
+            </q-item>
         </q-list>
     </q-drawer>
     <router-view />     

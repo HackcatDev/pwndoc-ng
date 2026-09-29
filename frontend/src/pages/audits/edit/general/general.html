@@ -240,6 +240,45 @@
                     {{$t('apiKeyCreatedAt')}} {{new Date(apiKeyCreatedAt).toLocaleString()}}
                 </div>
             </q-card-section>
+            <q-card-section v-if="aiStatus">
+                <div class="row items-center q-col-gutter-sm">
+                    <div class="col">
+                        <div class="text-subtitle2">{{$t('ai.auditTitle')}}</div>
+                        <div class="text-caption text-grey-7">{{aiStatus.configured ? $t('ai.auditInfo') : $t('ai.notConfigured')}}</div>
+                    </div>
+                    <div class="col-auto">
+                        <q-toggle
+                        v-model="audit.aiEnabled"
+                        :label="$t('ai.enable')"
+                        color="secondary"
+                        left-label
+                        :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || (!aiStatus.configured && !audit.aiEnabled)"
+                        />
+                    </div>
+                </div>
+                <q-expansion-item
+                v-if="audit.aiEnabled"
+                class="q-mt-sm"
+                dense
+                icon="tune"
+                :label="$t('ai.promptOverrides')"
+                :caption="$t('ai.promptOverridesInfo')"
+                header-class="bg-grey-2"
+                >
+                    <div class="q-pt-sm">
+                        <ai-prompts
+                        v-model="audit.aiPrompts"
+                        :fields="aiStatus.fields"
+                        :base-prompts="aiBasePrompts"
+                        :placeholders="aiStatus.placeholders"
+                        :custom-placeholder-help="aiStatus.customPlaceholderHelp"
+                        :inherit-label="$t('ai.globalPrompt')"
+                        :copy-label="$t('ai.copyGlobalPrompt')"
+                        :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                        />
+                    </div>
+                </q-expansion-item>
+            </q-card-section>
             <q-expansion-item 
             :label="$t('customFields')"
             v-if="audit.customFields && audit.customFields.length > 0"

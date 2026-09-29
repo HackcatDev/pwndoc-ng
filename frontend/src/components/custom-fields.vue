@@ -34,13 +34,19 @@
                         ref="basiceditor_custom" 
                         v-model="field.text" 
                         :noSync="noSyncEditor"
-                        :editable="!readonly"
+                        :editable="!readonly && !aiBusy[fieldSlug(field)]"
                         :collab="collab"
                         /> 
                     </template>
 
                     <template v-slot:label>
                         {{field.customField.label}} <span v-if="field.customField.required" class="text-red">*</span>
+                    </template>
+                    <template v-slot:after v-if="!diff && aiFields.includes(fieldSlug(field))">
+                        <ai-button
+                        :loading="!!aiBusy[fieldSlug(field)]"
+                        @click="$emit('ai', {key: fieldSlug(field), fieldId: field.customField._id})"
+                        />
                     </template>
                 </q-field>
 
@@ -218,9 +224,10 @@
 import { defineComponent } from 'vue';
 
 import BasicEditor from 'components/editor';
+import AiButton from 'components/ai-button';
 
 export default defineComponent({
-  emits: ['editorchange'],
+  emits: ['editorchange', 'ai'],
   name: 'custom-fields',
 
   props: {
@@ -252,6 +259,15 @@ export default defineComponent({
       idUnique: {
           type: String,
           default: ''
+      },
+      // AI assistant: slugs of the fields that get its button, and those being generated
+      aiFields: {
+          type: Array,
+          default: () => []
+      },
+      aiBusy: {
+          type: Object,
+          default: () => ({})
       }
   },
 
@@ -262,7 +278,8 @@ export default defineComponent({
   },
 
   components: {
-      BasicEditor
+      BasicEditor,
+      AiButton
   },
 
   computed: {
@@ -293,6 +310,18 @@ export default defineComponent({
               }) === 'undefined'
           }
           return false
+      },
+      // Same slug as the report template and the AI placeholders
+      fieldSlug: function(field) {
+          return this.$_.deburr(String(field.customField.label || '').toLowerCase()).replace(/\s/g, '').replace(/[^\w]/g, '_')
+      },
+      // Adds the text of the AI assistant at the end of a rich text field
+      aiInsert: function(fieldId, html, separatorHtml) {
+          var editors = this.$refs.basiceditor_custom
+          if (!editors) return false
+          if (!Array.isArray(editors)) editors = [editors]
+          var editor = editors.find(e => e && e.idUnique === `${fieldId}-custom-${this.idUnique}`)
+          return editor ? editor.aiInsert(html, separatorHtml) : false
       },
       eventPropagation: function(){
           this.$emit('editorchange')
