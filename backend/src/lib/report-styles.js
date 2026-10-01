@@ -27,6 +27,8 @@
  *   "listNumbering": "auto"      // "auto": self-contained list definitions added
  *                                // to the template; "template": use numId 1 (bullets)
  *                                // and 2 (ordered) of the template's numbering.xml
+ *   "imageSpacing": true         // blank line between text and an image and after
+ *                                // its caption (lib/ooxml-postprocess.js)
  * }
  *
  * Sizes are in points, colors are hex RGB (with or without '#'), spacing in
@@ -47,6 +49,7 @@ const DEFAULTS = {
     link: {},
     highlightSyntax: false,
     listNumbering: 'auto',
+    imageSpacing: true,
     syntaxColors: {
         'hljs-keyword': '0000FF',
         'hljs-built_in': '795E26',
@@ -184,6 +187,7 @@ function sanitize(input) {
     if (input.link) out.link = cleanFields(input.link, LINK_FIELDS)
     if (input.highlightSyntax !== undefined && input.highlightSyntax !== null && input.highlightSyntax !== '') out.highlightSyntax = !!input.highlightSyntax
     if (input.listNumbering === 'auto' || input.listNumbering === 'template') out.listNumbering = input.listNumbering
+    if (input.imageSpacing !== undefined && input.imageSpacing !== null && input.imageSpacing !== '') out.imageSpacing = !!input.imageSpacing
     if (input.syntaxColors && typeof input.syntaxColors === 'object') {
         out.syntaxColors = {}
         for (const cls of Object.keys(input.syntaxColors)) {

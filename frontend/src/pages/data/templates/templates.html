@@ -309,6 +309,15 @@
 
             <q-separator class="q-my-md" />
 
+            <!-- Images -->
+            <div class="text-bold q-mb-sm">{{$t('styles.images')}}</div>
+            <div class="text-grey-8 q-mb-sm">{{$t('styles.imagesInfo')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-select class="col-md-4 col-8" dense outlined stack-label :label="$t('styles.imageSpacing')" v-model="currentStyles.imageSpacing" :options="booleanOptions" emit-value map-options options-dense :hint="$t('styles.inherit') + ': ' + (stylesDefaults.imageSpacing === false ? $t('styles.no') : $t('styles.yes'))" />
+            </div>
+
+            <q-separator class="q-my-md" />
+
             <!-- Links -->
             <div class="text-bold q-mb-sm">{{$t('styles.links')}}</div>
             <div class="row q-col-gutter-sm">

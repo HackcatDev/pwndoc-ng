@@ -28,5 +28,14 @@ module.exports = function () {
       expect(out.codeBlock.font).toEqual(base.codeBlock.font)
       expect(out.profiles.caption.alignment).toEqual("center")
     })
+
+    it('image spacing: on by default, can be turned off, code in Courier New', () => {
+      expect(reportStyles.resolve().imageSpacing).toBe(true)
+      expect(reportStyles.resolve({ imageSpacing: false }).imageSpacing).toBe(false)
+      expect(reportStyles.resolve({ imageSpacing: "" }).imageSpacing).toBe(true)
+      expect(reportStyles.sanitize({ imageSpacing: 0 })).toEqual({ imageSpacing: false })
+      expect(reportStyles.resolve().inlineCode.font).toBe("Courier New")
+      expect(reportStyles.resolve().codeBlock.font).toBe("Courier New")
+    })
   })
 }

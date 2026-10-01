@@ -58,6 +58,8 @@ To handle images, HTML values with images are converted into an array of text an
 -> {@text | convertHTML:'remediation'}
 ```
 
+A blank line is added between the text of a field and an image that follows it, and after the caption of the image (after the image when it has no caption), unless the template already has one: see `imageSpacing` in [Styles](docxtemplate.md?id=formatting-of-converted-html).
+
 A raw tag (`{@...}`) replaces the whole paragraph that contains it, including the font set on that paragraph in the template.
 The formatting of converted HTML is therefore not taken from the template paragraph but from the [report formatting configuration](docxtemplate.md?id=formatting-of-converted-html).
 
@@ -229,7 +231,7 @@ List of findings. Array of Objects:
 * **findings[i].remediation** (HTML with images)
 * **findings[i].remediationComplexity** (Number 1-3)
 * **findings[i].priority** (Number 1-4)
-* **findings[i].references** (Array of String)
+* **findings[i].references** (Array of String, without the empty lines of the editor). Render it with `{@references | convertLines}` (one paragraph per reference, formatted like the text) rather than a loop with line breaks, which leaves blank lines before, between and after the references
 * **findings[i].cvss.vectorString**
 * **findings[i].cvss.baseMetricScore**
 * **findings[i].cvss.baseSeverity**
@@ -304,12 +306,14 @@ Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a
   "profiles": {
     "text":        { "font": "Helvetica", "size": 12 },
     "caption":     { "font": "Helvetica", "size": 8, "alignment": "center" },
-    "remediation": { "font": "Helvetica", "size": 12, "color": "333333" }
+    "remediation": { "font": "Helvetica", "size": 12, "color": "333333" },
+    "references":  { "font": "Helvetica", "size": 12 }
   },
-  "inlineCode": { "font": "Consolas", "size": 12, "shading": "F2F2F2" },
-  "codeBlock":  { "font": "Consolas", "size": 10, "shading": "D9D9D9", "spacingAfter": 6 },
+  "inlineCode": { "font": "Courier New", "size": 12, "shading": "F2F2F2" },
+  "codeBlock":  { "font": "Courier New", "size": 10, "shading": "D9D9D9", "spacingAfter": 6 },
   "link":       { "color": "0563C1", "underline": true },
-  "highlightSyntax": false
+  "highlightSyntax": false,
+  "imageSpacing": true
 }
 ```
 
@@ -322,6 +326,8 @@ Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a
 | `codeBlock` | code blocks (one shaded paragraph, lines separated by line breaks) | font, size, color, shading, spacingBefore, spacingAfter, lineSpacing, pStyle (default `Code`) |
 | `link` | hyperlinks | color, underline, rStyle (default `PwndocLink`) |
 | `highlightSyntax` | code blocks | `true` to color tokens with `syntaxColors` (light palette by default) |
+| `profiles.references` | `{@field \| convertLines}` | same |
+| `imageSpacing` | images of the document | `true` (default): blank line between text and an image and after its caption (after the image when it has no caption), unless there is one already; `false`: images are left as the template places them |
 | `listNumbering` | bullet / numbered lists | `auto` (default): self-contained list definitions are added to the document, every numbered list restarts at 1; `template`: use `numId` 1 (bullets) and 2 (numbered) of the template's *numbering.xml* as described below |
 
 Colors are hex RGB with or without `#`. The name given to `convertHTML` that does not match a profile is used as a Word paragraph style id (previous behaviour).
@@ -477,6 +483,16 @@ The optional argument selects a [formatting profile](docxtemplate.md?id=formatti
 >```
 {@value | convertHTML}
 {@value | convertHTML:'remediation'}
+>```
+
+### convertLines
+
+Convert a list of lines (an array of strings, e.g. `references`, or a multiline string) into one paragraph per line, formatted like converted HTML with the `references` profile (or the one given as argument). Empty lines are dropped, nothing is added before, between or after the lines.
+
+> Use in template document
+>```
+{@references | convertLines}
+{@references | convertLines:'text'}
 >```
 
 ### count

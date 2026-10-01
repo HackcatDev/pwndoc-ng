@@ -49,7 +49,7 @@ export default {
             // Formatting styles (fonts used by convertHTML) of the selected template
             stylesTemplate: null,
             stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}},
-            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null},
+            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null},
             newProfileName: '',
             stylesFields: {
                 profile: ['font', 'size', 'color', 'bold', 'italic', 'alignment', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle'],
@@ -269,7 +269,7 @@ export default {
         // ---- Formatting styles (per template) ----
 
         emptyStyles: function() {
-            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null}
+            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null}
         },
 
         openStyles: function(row) {
@@ -289,6 +289,7 @@ export default {
                 styles.link = Object.assign({}, saved.link || {})
                 styles.highlightSyntax = (typeof saved.highlightSyntax === 'boolean') ? saved.highlightSyntax : null
                 styles.listNumbering = saved.listNumbering || null
+                styles.imageSpacing = (typeof saved.imageSpacing === 'boolean') ? saved.imageSpacing : null
                 this.currentStyles = styles
                 this.$refs.stylesModal.show()
             })
@@ -348,6 +349,7 @@ export default {
             })
             if (typeof styles.highlightSyntax === 'boolean') result.highlightSyntax = styles.highlightSyntax
             if (styles.listNumbering) result.listNumbering = styles.listNumbering
+            if (typeof styles.imageSpacing === 'boolean') result.imageSpacing = styles.imageSpacing
             return result
         },
 

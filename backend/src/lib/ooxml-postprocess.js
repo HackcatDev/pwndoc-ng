@@ -10,6 +10,13 @@
  * not, and the result depends on which block wins). `mergeCellProperties`
  * merges every extra `<w:tcPr>` of a cell into its first one, respecting the
  * CT_TcPr element order, so the cell is properly shaded.
+ *
+ * Image spacing: an image inserted by the template ({%image}, usually inside
+ * an {#images} loop after the text of a field) sits right under the text and
+ * the text that follows sits right under its caption. `spaceImages` adds an
+ * empty paragraph between a non-empty paragraph (or a table) and an image,
+ * and after the caption of the image (after the image itself when it has no
+ * caption), unless an empty paragraph is already there.
  */
 
 const { DOMParser, XMLSerializer } = require('@xmldom/xmldom')
@@ -123,18 +130,152 @@ function mergeCellProperties(xml) {
 }
 
 /*
+ * *** Image spacing ***
+ */
+
+// Elements that do not count as content between two paragraphs
+const TRANSPARENT = new Set(['bookmarkStart', 'bookmarkEnd', 'commentRangeStart', 'commentRangeEnd', 'proofErr', 'permStart', 'permEnd'])
+
+function paragraphText(p) {
+    let text = ''
+    const ts = p.getElementsByTagNameNS(W_NS, 't')
+    for (let i = 0; i < ts.length; i++) text += ts[i].textContent || ''
+    return text
+}
+
+function hasPicture(p) {
+    if (p.getElementsByTagNameNS(W_NS, 'drawing').length) return true
+    if (p.getElementsByTagNameNS(W_NS, 'pict').length) return true
+    return false
+}
+
+function isParagraph(node) {
+    return !!node && node.nodeType === 1 && localName(node) === 'p'
+}
+
+// A paragraph holding a picture and no text
+function isImageParagraph(node) {
+    return isParagraph(node) && hasPicture(node) && paragraphText(node).trim() === ''
+}
+
+// A paragraph or a table with something visible in it
+function isContent(node) {
+    if (!node || node.nodeType !== 1) return false
+    const name = localName(node)
+    if (name === 'tbl') return true
+    if (name === 'sdt') return paragraphText(node).trim() !== '' || hasPicture(node)
+    if (name !== 'p') return false
+    return paragraphText(node).trim() !== '' || hasPicture(node)
+}
+
+function siblingElement(node, direction) {
+    let n = direction < 0 ? node.previousSibling : node.nextSibling
+    while (n) {
+        if (n.nodeType === 1 && !TRANSPARENT.has(localName(n))) return n
+        n = direction < 0 ? n.previousSibling : n.nextSibling
+    }
+    return null
+}
+
+function paragraphProperty(p, name) {
+    const pPr = elementChildren(p, 'pPr')[0]
+    if (!pPr) return null
+    const el = elementChildren(pPr, name)[0]
+    return el ? (el.getAttributeNS(W_NS, 'val') || el.getAttribute('w:val')) : null
+}
+
+// The paragraph after an image is its caption when it is styled as one, holds
+// a SEQ field or shares the centered alignment of the image. An empty one is
+// the caption slot of an image without caption ({caption} rendered empty): it
+// is part of the figure too, so the text after it gets the same blank line.
+function isCaption(node, imageParagraph) {
+    if (!isParagraph(node) || hasPicture(node)) return false
+    const style = paragraphProperty(node, 'pStyle') || ''
+    if (/caption|l[eé]gende|beschriftung/i.test(style)) return true
+    const instr = node.getElementsByTagNameNS(W_NS, 'instrText')
+    for (let i = 0; i < instr.length; i++) if (/^\s*SEQ\s/i.test(instr[i].textContent || '')) return true
+    const jc = paragraphProperty(node, 'jc')
+    return jc === 'center' && paragraphProperty(imageParagraph, 'jc') === 'center'
+}
+
+// Empty paragraph with the properties of the image paragraph (same font size
+// for the blank line), without list, section, alignment or change tracking
+function blankParagraph(doc, model) {
+    const p = doc.createElementNS(W_NS, 'w:p')
+    const pPr = elementChildren(model, 'pPr')[0]
+    if (pPr) {
+        const copy = pPr.cloneNode(true)
+        for (const el of elementChildren(copy)) {
+            if (['numPr', 'sectPr', 'pPrChange', 'jc', 'keepNext', 'pageBreakBefore', 'framePr'].includes(localName(el))) copy.removeChild(el)
+        }
+        p.appendChild(copy)
+    }
+    return p
+}
+
+/*
+ * Adds a blank line before the images that follow text and after their
+ * caption (or after the image without caption) when text follows.
+ * Returns the (possibly unchanged) XML string.
+ */
+function spaceImages(xml) {
+    if (xml.indexOf('<w:drawing') === -1 && xml.indexOf('<w:pict') === -1) return xml
+
+    const errors = []
+    const doc = new DOMParser({ onError: (level, msg) => { if (level === 'fatalError' || level === 'error') errors.push(msg) } })
+        .parseFromString(xml, 'text/xml')
+    if (errors.length || !doc || !doc.documentElement) {
+        console.log('ooxml-postprocess: cannot parse part, images left unchanged', errors[0] || '')
+        return xml
+    }
+
+    let changed = false
+    const paragraphs = Array.prototype.slice.call(doc.getElementsByTagNameNS(W_NS, 'p'))
+    for (const p of paragraphs) {
+        if (!isImageParagraph(p)) continue
+        const parent = p.parentNode
+        if (!parent) continue
+
+        const previous = siblingElement(p, -1)
+        if (previous && isContent(previous) && !isImageParagraph(previous)) {
+            parent.insertBefore(blankParagraph(doc, p), p)
+            changed = true
+        }
+
+        let end = p
+        let next = siblingElement(p, 1)
+        if (next && isCaption(next, p)) {
+            end = next
+            next = siblingElement(next, 1)
+        }
+        if (next && isContent(next)) {
+            parent.insertBefore(blankParagraph(doc, p), end.nextSibling)
+            changed = true
+        }
+    }
+    if (!changed) return xml
+
+    let out = new XMLSerializer().serializeToString(doc)
+    if (xml.startsWith('<?xml') && !out.startsWith('<?xml')) {
+        out = xml.substring(0, xml.indexOf('?>') + 2) + out
+    }
+    return out
+}
+
+/*
  * Applies the post-processing to every relevant part of the zip
  * (PizZip instance returned by docxtemplater's getZip()).
  */
-function processZip(zip) {
+function processZip(zip, options = {}) {
     Object.keys(zip.files).forEach((name) => {
         if (!PART_REGEX.test(name)) return
         const file = zip.files[name]
         if (!file || file.dir) return
         const xml = file.asText()
-        const fixed = mergeCellProperties(xml)
+        let fixed = mergeCellProperties(xml)
+        if (options.imageSpacing && name === 'word/document.xml') fixed = spaceImages(fixed)
         if (fixed !== xml) zip.file(name, fixed)
     })
 }
 
-module.exports = { mergeCellProperties, processZip, needsCellMerge }
+module.exports = { mergeCellProperties, processZip, needsCellMerge, spaceImages }

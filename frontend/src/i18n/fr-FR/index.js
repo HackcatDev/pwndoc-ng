@@ -46,6 +46,9 @@ export default {
         listNumbering: 'Définitions de listes',
         listNumberingAuto: 'automatique',
         listNumberingTemplate: 'depuis le modèle',
+        images: 'Images',
+        imagesInfo: "Ligne vide entre le texte et une image, et après sa légende (après l'image si elle n'a pas de légende), sauf s'il y en a déjà une.",
+        imageSpacing: 'Ligne vide autour des images',
         reset: 'Effacer les surcharges',
         resetTitle: 'Effacer les surcharges de mise en forme',
         resetConfirm: 'Toutes les valeurs de ce modèle seront effacées et les valeurs par défaut du déploiement seront utilisées. Continuer ?'

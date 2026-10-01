@@ -155,7 +155,9 @@ async function generateDoc(audit) {
     }
 
     // Merge cell shading fragments ({@cvss.cellColor}...) into the cells' own properties
-    ooxmlPostprocess.processZip(doc.getZip());
+    // and add a blank line around the images (between the text and an image,
+    // after the caption) unless the report styles turn it off
+    ooxmlPostprocess.processZip(doc.getZip(), {imageSpacing: currentStyles.imageSpacing !== false});
 
     // Include refs in document
     const relsPath = "word/_rels/document.xml.rels";
@@ -609,6 +611,29 @@ expressions.filters.convertHTML = function(input, style, listIds) {
     }
 
     return html2ooxml(html, style, listIdsArray, { styles: styles })
+}
+
+// Lines of a list field (references...): trimmed, empty lines dropped, so that
+// neither the template loops nor convertLines produce blank lines
+function cleanLines(input) {
+    if (input === undefined || input === null) return []
+    var list = Array.isArray(input) ? input : String(input).split(/\r?\n/)
+    return list
+        .map(line => (line === undefined || line === null) ? '' : String(line).trim())
+        .filter(line => line !== '')
+}
+exports.cleanLines = cleanLines
+
+// Converts a list of lines (an array or a multiline string) into paragraphs of
+// plain text, one per line, formatted like the rest of the converted text:
+// {@references | convertLines}. Optional argument: formatting profile
+// ('references' by default, see convertHTML). Unlike a template loop with line
+// breaks, there is no blank line before, between or after the lines.
+expressions.filters.convertLines = function(input, style) {
+    var lines = cleanLines(input)
+    if (lines.length === 0) return ''
+    var html = lines.map(line => `<p>${_.escape(line)}</p>`).join('')
+    return expressions.filters.convertHTML(html, style || 'references')
 }
 
 // Fonction pour modifier le numbering.xml du document DOCX
@@ -1290,7 +1315,7 @@ async function prepAuditData(data, settings) {
             remediation: await splitHTMLParagraphs(finding.remediation),
             remediationComplexity: finding.remediationComplexity || "",
             priority: finding.priority || "",
-            references: finding.references || [],
+            references: cleanLines(finding.references),
             poc: await splitHTMLParagraphs(finding.poc),
             affected: finding.scope || "",
             //affected: stripParagraphTags(finding.scope) || [],

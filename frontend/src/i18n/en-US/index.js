@@ -46,6 +46,9 @@ export default {
         listNumbering: 'List definitions',
         listNumberingAuto: 'automatic',
         listNumberingTemplate: 'from template',
+        images: 'Images',
+        imagesInfo: 'Blank line between the text and an image, and after its caption (after the image when it has no caption), unless there is one already.',
+        imageSpacing: 'Blank line around images',
         reset: 'Clear overrides',
         resetTitle: 'Clear formatting overrides',
         resetConfirm: 'All values of this template will be cleared and the deployment defaults will be used. Continue?'
