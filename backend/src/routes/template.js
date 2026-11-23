@@ -46,16 +46,27 @@ module.exports = function(app) {
 
     // Get the effective default formatting (built-in defaults + config/report-styles.json)
     // used when a template does not override a value
-    app.get("/api/templates/styles/defaults", acl.hasPermission('templates:read'), function(req, res) {
+    app.get("/api/templates/styles/defaults", acl.hasPermission('templates:read'), async function(req, res) {
         // #swagger.tags = ['Templates']
 
+        var styles = reportStyles.resolve()
+        // severity colors not set in report-styles.json come from the settings
+        try {
+            var settings = await require('mongoose').model('Settings').getAll()
+            styles.severityColors = Object.assign(reportStyles.severityColorsFromSettings(settings), styles.severityColors)
+        } catch (err) {
+            console.log(err)
+        }
         Response.Ok(res, {
-            styles: reportStyles.resolve(),
+            styles: styles,
             fields: {
                 profile: reportStyles.PROFILE_FIELDS,
                 inlineCode: reportStyles.INLINE_CODE_FIELDS,
                 codeBlock: reportStyles.CODE_BLOCK_FIELDS,
-                link: reportStyles.LINK_FIELDS
+                link: reportStyles.LINK_FIELDS,
+                toc: reportStyles.TOC_FIELDS,
+                heading: reportStyles.HEADING_FIELDS,
+                findingLink: reportStyles.FINDING_LINK_FIELDS
             }
         })
     });

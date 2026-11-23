@@ -11,6 +11,10 @@
  * merges every extra `<w:tcPr>` of a cell into its first one, respecting the
  * CT_TcPr element order, so the cell is properly shaded.
  *
+ * Markers: the {h1}..{h6}, {anchor} and {link}...{/link} tags and the
+ * Legendary findings are applied by lib/report-markers.js, after the cells
+ * are merged (the Legendary flag travels in the cellColor fragment).
+ *
  * Image spacing: an image inserted by the template ({%image}, usually inside
  * an {#images} loop after the text of a field) sits right under the text and
  * the text that follows sits right under its caption. `spaceImages` adds an
@@ -20,6 +24,7 @@
  */
 
 const { DOMParser, XMLSerializer } = require('@xmldom/xmldom')
+const reportMarkers = require('./report-markers')
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -273,6 +278,9 @@ function processZip(zip, options = {}) {
         if (!file || file.dir) return
         const xml = file.asText()
         let fixed = mergeCellProperties(xml)
+        // headings, finding links and Legendary colors (lib/report-markers.js)
+        if (name === 'word/document.xml') fixed = reportMarkers.processDocument(fixed, options.markers || {})
+        else fixed = reportMarkers.stripMarkers(fixed)
         if (options.imageSpacing && name === 'word/document.xml') fixed = spaceImages(fixed)
         if (fixed !== xml) zip.file(name, fixed)
     })

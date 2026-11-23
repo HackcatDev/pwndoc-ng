@@ -15,6 +15,7 @@
 const _ = require('lodash')
 const CVSS31 = require('./cvsscalc31')
 const markdown = require('./markdown')
+const plainText = require('./plain-text')
 
 // API name -> {field, kind} of the audit document
 const FIELDS = {
@@ -24,7 +25,7 @@ const FIELDS = {
     observation: { field: 'observation', kind: 'html' },
     remediation: { field: 'remediation', kind: 'html' },
     poc: { field: 'poc', kind: 'html' },
-    affected_assets: { field: 'scope', kind: 'html' },
+    affected_assets: { field: 'scope', kind: 'plain' },
     references: { field: 'references', kind: 'lines' },
     vuln_type: { field: 'vulnType', kind: 'text' },
     category: { field: 'category', kind: 'text' },
@@ -64,10 +65,10 @@ function findingCustomFields(customFields) {
     return result
 }
 
-function customFieldValue(field, value) {
+function customFieldValue(field, value, previousValue) {
     switch (field.fieldType) {
         case 'text': // rich text
-            return markdown.toHtml(value)
+            return markdown.prepareImages(markdown.toHtml(value), previousValue)
         case 'checkbox': case 'select-multiple':
             return Array.isArray(value) ? value.map((item) => String(item)) : markdown.toLines(value)
         case 'date':
@@ -89,12 +90,24 @@ function readCustomFieldValue(field, value) {
  * returned, so the other fields of the finding keep their value. When false
  * (create), `title` and `cvss_string` are required.
  *
+ * previous: the finding being updated, so that the images of its rich text
+ * fields keep their attributes (border, processed caption) - Markdown has no
+ * syntax for them; images that are new get their caption's trailing dot removed.
+ *
  * Returns {finding, customFields, errors}: `finding` holds the plain fields,
  * `customFields` the [{slug, field, value}] to merge into finding.customFields
  * and `errors` the reasons to answer 422.
  */
-function parse(body, availableCustomFields, { partial = false } = {}) {
+function parse(body, availableCustomFields, { partial = false, previous = null } = {}) {
     const finding = {}
+    const before = previous ? (typeof previous.toObject === 'function' ? previous.toObject() : previous) : {}
+    const previousCustomValue = (field) => {
+        const entry = (before.customFields || []).find((e) => {
+            const id = e.customField && e.customField._id ? e.customField._id : e.customField
+            return id && String(id) === String(field._id)
+        })
+        return entry ? entry.text : null
+    }
     const customFields = []
     const errors = []
     const input = body && typeof body === 'object' ? body : {}
@@ -116,7 +129,7 @@ function parse(body, availableCustomFields, { partial = false } = {}) {
             for (const key of Object.keys(value)) {
                 const field = known[slugify(key)]
                 if (!field) { errors.push(`unknown custom field: ${key}`); continue }
-                customFields.push({ slug: slugify(key), field: field, value: customFieldValue(field, value[key]) })
+                customFields.push({ slug: slugify(key), field: field, value: customFieldValue(field, value[key], previousCustomValue(field)) })
             }
             continue
         }
@@ -126,7 +139,7 @@ function parse(body, availableCustomFields, { partial = false } = {}) {
             // a custom field can also be given at the top level, by slug
             const field = known[slugify(name)]
             if (field) {
-                customFields.push({ slug: slugify(name), field: field, value: customFieldValue(field, value) })
+                customFields.push({ slug: slugify(name), field: field, value: customFieldValue(field, value, previousCustomValue(field)) })
                 continue
             }
             errors.push(`unknown field: ${name}`)
@@ -141,7 +154,10 @@ function parse(body, availableCustomFields, { partial = false } = {}) {
                 break
             }
             case 'html':
-                finding[definition.field] = markdown.toHtml(value)
+                finding[definition.field] = markdown.prepareImages(markdown.toHtml(value), before[definition.field])
+                break
+            case 'plain': // plain text, an array is one item per line
+                finding[definition.field] = plainText.toPlainText(value)
                 break
             case 'lines':
                 finding[definition.field] = markdown.toLines(value)
@@ -235,7 +251,7 @@ function serialize(finding, availableCustomFields) {
         description: markdown.toMarkdown(plain.description),
         observation: markdown.toMarkdown(plain.observation),
         poc: markdown.toMarkdown(plain.poc),
-        affected_assets: markdown.toMarkdown(plain.scope),
+        affected_assets: plainText.toPlainText(plain.scope),
         remediation: markdown.toMarkdown(plain.remediation),
         references: plain.references || [],
         custom_fields: {},

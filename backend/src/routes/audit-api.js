@@ -154,8 +154,13 @@ module.exports = function(app, io) {
         var settings = await assertEditable(req, res)
         if (!settings) return
 
+        // read first: the finding must exist in THIS audit, the custom fields
+        // that are not part of the request have to keep their value and the
+        // images of the updated fields their attributes
+        var current = await Audit.getFinding(true, req.audit._id, null, req.params.findingId)
+
         var customFields = await auditCustomFields()
-        var parsed = findingApi.parse(req.body, customFields, {partial: true})
+        var parsed = findingApi.parse(req.body, customFields, {partial: true, previous: current})
         if (parsed.errors.length > 0) {
             Response.BadParameters(res, parsed.errors.join('; '))
             return
@@ -164,10 +169,6 @@ module.exports = function(app, io) {
             Response.BadParameters(res, 'No field to update')
             return
         }
-
-        // read first: the finding must exist in THIS audit, and the custom
-        // fields that are not part of the request have to keep their value
-        var current = await Audit.getFinding(true, req.audit._id, null, req.params.findingId)
 
         var update = parsed.finding
         if (parsed.customFields.length > 0) {

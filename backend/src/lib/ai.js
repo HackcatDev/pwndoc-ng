@@ -15,6 +15,7 @@
 const _ = require('lodash')
 const CVSS31 = require('./cvsscalc31')
 const markdown = require('./markdown')
+const plainText = require('./plain-text')
 
 // Same slug as the report generator and the findings API
 function slugify(label) {
@@ -195,7 +196,7 @@ function buildValues({ audit = {}, finding = {}, fieldKey, languages = [], custo
         observation: htmlToText(finding.observation),
         poc: htmlToText(finding.poc),
         references: (finding.references || []).join('\n'),
-        affected_assets: htmlToText(finding.scope),
+        affected_assets: plainText.toPlainText(finding.scope),
         remediation: htmlToText(finding.remediation),
         remediation_complexity: COMPLEXITY[finding.remediationComplexity] || '',
         priority: PRIORITY[finding.priority] || '',

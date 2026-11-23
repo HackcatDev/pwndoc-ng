@@ -59,3 +59,12 @@ function getSockets(io, room) {
   return result
 }
 exports.getSockets = getSockets
+
+// Network Scan section of an audit: turned on or off in General Information.
+// Audits saved before the switch existed show it when they hold scanned hosts.
+function networkEnabled(audit) {
+  if (!audit) return false
+  if (typeof audit.showNetwork === 'boolean') return audit.showNetwork
+  return (audit.scope || []).some(item => item && Array.isArray(item.hosts) && item.hosts.length > 0)
+}
+exports.networkEnabled = networkEnabled

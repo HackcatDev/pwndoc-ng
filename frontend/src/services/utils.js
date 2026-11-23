@@ -79,6 +79,35 @@ export default {
     return result;
   },
 
+  // Plain text of a field written with the rich text editor (one line per
+  // paragraph, links reduced to their text); plain text is returned as is.
+  // Same rules as backend/src/lib/plain-text.js
+  htmlToPlainText(value) {
+    if (value === null || value === undefined) return "";
+    var text = String(value);
+    if (!/^\s*<(p|div|ul|ol|li|h[1-6]|pre|blockquote|table|figure|img|br|hr)(\s[^>]*)?\/?>/i.test(text)) return text;
+    var doc = new DOMParser().parseFromString(text, "text/html");
+    var lines = [];
+    var current = "";
+    var flush = () => { if (current !== "") lines.push(current); current = ""; };
+    var walk = (node) => {
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === 3) current += child.nodeValue;
+        else if (child.nodeType === 1) {
+          var tag = child.tagName.toLowerCase();
+          if (tag === "br") { flush(); return; }
+          var block = /^(p|div|li|h[1-6]|pre|blockquote|tr|ul|ol|table|figcaption)$/.test(tag);
+          if (block) flush();
+          walk(child);
+          if (block) flush();
+        }
+      });
+    };
+    walk(doc.body);
+    flush();
+    return lines.map((line) => line.replace(/ /g, " ").replace(/\s+$/, "")).join("\n").trim();
+  },
+
   // Update all basic-editor when noSync is necessary for performance (text with images).
   syncEditors: function (refs) {
     Object.keys(refs).forEach((key) => {

@@ -164,6 +164,8 @@ export default {
                 this.audit = data.data.datas;
                 this.audit.aiEnabled = !!this.audit.aiEnabled;
                 this.audit.aiPrompts = this.audit.aiPrompts || {};
+                this.audit.showNetwork = !!this.audit.showNetwork;
+                this.audit.showTestAccounts = this.audit.showTestAccounts !== false;
                 this.auditOrig = this.$_.cloneDeep(this.audit);
                 this.getCollaborators();
                 this.getReviewers();

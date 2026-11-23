@@ -35,7 +35,7 @@ const ALLOWED_TAGS = {
     blockquote: [], hr: [],
     pre: ['class'], code: ['class'],
     a: ['href', 'title', 'target', 'rel'],
-    img: ['src', 'alt', 'title', 'class', 'width', 'height'],
+    img: ['src', 'alt', 'title', 'class', 'width', 'height', 'data-border-width', 'data-border-color', 'data-caption-trimmed'],
     figure: ['class'], figcaption: [],
     table: [], thead: [], tbody: [], tfoot: [],
     tr: [], td: ['colspan', 'rowspan', 'colwidth'], th: ['colspan', 'rowspan', 'colwidth'],
@@ -99,6 +99,9 @@ function cleanAttributes(tag, attribs) {
                 break
             case 'colwidth': value = /^\[[\d,\s]*\]$|^\d{1,5}$/.test(String(value).trim()) ? value : null; break
             case 'target': value = value === '_blank' ? value : null; break
+            case 'data-border-width': value = /^\d{1,2}(\.\d+)?$/.test(String(value).trim()) ? String(value).trim() : null; break
+            case 'data-border-color': value = /^#?[0-9A-Fa-f]{6}$/.test(String(value).trim()) ? String(value).trim() : null; break
+            case 'data-caption-trimmed': value = value === 'true' ? value : null; break
             default: value = String(value)
         }
         if (value === null) continue
@@ -215,6 +218,67 @@ function toHtml(markdown) {
     return sanitize(html)
 }
 
+/*
+ * *** Images inserted through the API ***
+ *
+ * Markdown has no syntax for the attributes the editor keeps on an image
+ * (border, caption already processed), so an update would lose them:
+ * prepareImages(html, previousHtml) gives every image of `html` the
+ * attributes of the image with the same src in the previous value of the
+ * field. An image that was not there before is being inserted: the trailing
+ * dot of its caption is removed and data-caption-trimmed="true" is set, so
+ * that a dot added back later is kept.
+ */
+const IMG_TAG_REGEX = /<img\b[^>]*>/g
+
+function imgAttribute(tag, name) {
+    const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)
+    return m ? m[1] : null
+}
+
+function setImgAttribute(tag, name, value) {
+    const re = new RegExp(`\\s${name}="[^"]*"`)
+    const attr = ` ${name}="${escapeAttribute(value)}"`
+    if (re.test(tag)) return tag.replace(re, attr)
+    return tag.replace(/\s*\/?>$/, (end) => attr + end)
+}
+
+// One trailing dot is removed, an ellipsis is kept
+function trimCaption(caption) {
+    return String(caption).replace(/\s+$/, '').replace(/([^.])\.$/, '$1')
+}
+
+function prepareImages(html, previousHtml) {
+    if (!html || String(html).indexOf('<img') === -1) return html
+    const previous = {}
+    String(previousHtml || '').replace(IMG_TAG_REGEX, (tag) => {
+        const src = imgAttribute(tag, 'src')
+        if (src && !previous[src]) previous[src] = tag
+        return tag
+    })
+    return String(html).replace(IMG_TAG_REGEX, (tag) => {
+        const src = imgAttribute(tag, 'src')
+        const before = src ? previous[src] : null
+        let out = tag
+        const alreadyTrimmed = imgAttribute(tag, 'data-caption-trimmed') === 'true' || (before && imgAttribute(before, 'data-caption-trimmed') === 'true')
+        if (!alreadyTrimmed) {
+            const alt = imgAttribute(tag, 'alt')
+            if (alt !== null) out = setImgAttribute(out, 'alt', trimCaption(unescapeAttribute(alt)))
+        }
+        out = setImgAttribute(out, 'data-caption-trimmed', 'true')
+        if (before && imgAttribute(out, 'data-border-width') === null && imgAttribute(before, 'data-border-width') !== null) {
+            out = setImgAttribute(out, 'data-border-width', unescapeAttribute(imgAttribute(before, 'data-border-width')))
+            const color = imgAttribute(before, 'data-border-color')
+            if (color !== null) out = setImgAttribute(out, 'data-border-color', unescapeAttribute(color))
+        }
+        return out
+    })
+}
+
+function unescapeAttribute(value) {
+    return String(value).replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+}
+
 const turndown = new TurndownService({
     headingStyle: 'atx',
     hr: '---',
@@ -300,4 +364,4 @@ function toLines(value) {
         .filter((item) => item !== '')
 }
 
-module.exports = { toHtml, toMarkdown, toLines, sanitize }
+module.exports = { toHtml, toMarkdown, toLines, sanitize, prepareImages, trimCaption }

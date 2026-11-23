@@ -157,7 +157,7 @@ module.exports = function (request, app) {
 
         expect(response.status).toBe(200);
         expect(response.body.datas.description).toEqual("<p>The endpoint <code>/api/users</code> is vulnerable to <strong>SQL injection</strong>.</p>");
-        expect(response.body.datas.scope).toContain("<li><p>");
+        expect(response.body.datas.scope).toBe("- https://a.example.com/api/users");
         expect(response.body.datas.references).toEqual(["https://cwe.mitre.org/data/definitions/89.html"]);
       });
 

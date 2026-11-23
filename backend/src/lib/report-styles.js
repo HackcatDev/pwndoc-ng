@@ -27,8 +27,18 @@
  *   "listNumbering": "auto"      // "auto": self-contained list definitions added
  *                                // to the template; "template": use numId 1 (bullets)
  *                                // and 2 (ordered) of the template's numbering.xml
- *   "imageSpacing": true         // blank line between text and an image and after
+ *   "imageSpacing": true,        // blank line between text and an image and after
  *                                // its caption (lib/ooxml-postprocess.js)
+ *   "toc":        { font, size, color },   // TOC1..TOC9 styles (page numbers
+ *                                // included); font defaults to the text profile
+ *   "headings":   { "1": { font, size, color, bold, italic, spacingBefore,
+ *                          spacingAfter }, ... "6": {...} }  // Heading1..6
+ *                                // styles and the {h1}..{h6} paragraphs
+ *   "findingLink": { color, underline, bold, italic, rStyle }, // {link}...{/link}
+ *   "severityColors": { none, low, medium, high, critical, legendary },
+ *                                // cell colors ({@cvss.cellColor}), default:
+ *                                // the CVSS colors of the settings
+ *   "legendary": false           // findings scored 9.5 or more are "Legendary"
  * }
  *
  * Sizes are in points, colors are hex RGB (with or without '#'), spacing in
@@ -50,6 +60,11 @@ const DEFAULTS = {
     highlightSyntax: false,
     listNumbering: 'auto',
     imageSpacing: true,
+    toc: {},
+    headings: {},
+    findingLink: { color: '0563C1', underline: true },
+    severityColors: { legendary: '2D0A4E' },
+    legendary: false,
     syntaxColors: {
         'hljs-keyword': '0000FF',
         'hljs-built_in': '795E26',
@@ -88,6 +103,11 @@ const PROFILE_FIELDS = ['font', 'size', 'color', 'bold', 'italic', 'alignment', 
 const INLINE_CODE_FIELDS = ['font', 'size', 'color', 'shading', 'rStyle']
 const CODE_BLOCK_FIELDS = ['font', 'size', 'color', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle']
 const LINK_FIELDS = ['color', 'underline', 'rStyle']
+const TOC_FIELDS = ['font', 'size', 'color']
+const HEADING_FIELDS = ['font', 'size', 'color', 'bold', 'italic', 'spacingBefore', 'spacingAfter']
+const FINDING_LINK_FIELDS = ['color', 'underline', 'bold', 'italic', 'rStyle']
+const SEVERITIES = ['none', 'low', 'medium', 'high', 'critical', 'legendary']
+const HEADING_LEVELS = ['1', '2', '3', '4', '5', '6']
 const ALIGNMENTS = ['left', 'center', 'right', 'justify']
 
 function configPath() {
@@ -188,6 +208,22 @@ function sanitize(input) {
     if (input.highlightSyntax !== undefined && input.highlightSyntax !== null && input.highlightSyntax !== '') out.highlightSyntax = !!input.highlightSyntax
     if (input.listNumbering === 'auto' || input.listNumbering === 'template') out.listNumbering = input.listNumbering
     if (input.imageSpacing !== undefined && input.imageSpacing !== null && input.imageSpacing !== '') out.imageSpacing = !!input.imageSpacing
+    if (input.toc) out.toc = cleanFields(input.toc, TOC_FIELDS)
+    if (input.findingLink) out.findingLink = cleanFields(input.findingLink, FINDING_LINK_FIELDS)
+    if (input.headings && typeof input.headings === 'object') {
+        out.headings = {}
+        for (const level of HEADING_LEVELS) {
+            if (input.headings[level]) out.headings[level] = cleanFields(input.headings[level], HEADING_FIELDS)
+        }
+    }
+    if (input.severityColors && typeof input.severityColors === 'object') {
+        out.severityColors = {}
+        for (const severity of SEVERITIES) {
+            const c = cleanHex(input.severityColors[severity])
+            if (c) out.severityColors[severity] = c
+        }
+    }
+    if (input.legendary !== undefined && input.legendary !== null && input.legendary !== '') out.legendary = !!input.legendary
     if (input.syntaxColors && typeof input.syntaxColors === 'object') {
         out.syntaxColors = {}
         for (const cls of Object.keys(input.syntaxColors)) {
@@ -199,13 +235,31 @@ function sanitize(input) {
     return out
 }
 
+// Severity colors of the settings (Settings > Report > CVSS colors), without '#'
+function severityColorsFromSettings(settings) {
+    const out = {}
+    const colors = settings && settings.report && settings.report.public && settings.report.public.cvssColors
+    if (!colors) return out
+    for (const severity of ['none', 'low', 'medium', 'high', 'critical']) {
+        const c = cleanHex(colors[severity + 'Color'])
+        if (c) out[severity] = c
+    }
+    return out
+}
+
 module.exports = {
     DEFAULTS,
     PROFILE_FIELDS,
     INLINE_CODE_FIELDS,
     CODE_BLOCK_FIELDS,
     LINK_FIELDS,
+    TOC_FIELDS,
+    HEADING_FIELDS,
+    FINDING_LINK_FIELDS,
+    SEVERITIES,
+    HEADING_LEVELS,
     loadGlobal,
     resolve,
     sanitize,
+    severityColorsFromSettings,
 }

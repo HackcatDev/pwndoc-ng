@@ -36,8 +36,8 @@ module.exports = function () {
         description: "<p>It is <strong>bad</strong>.</p>",
         observation: "<p>Seen in prod.</p>",
         remediation: "<p>Use <code>parameters</code>.</p>",
-        // GFM turns a bare URL into a link, which the report keeps as a hyperlink
-        scope: '<ul>\n<li><p><a href="https://a.example.com">https://a.example.com</a></p></li>\n<li><p><a href="https://b.example.com">https://b.example.com</a></p></li>\n</ul>',
+        // affected assets are plain text, kept as sent (no Markdown, no links)
+        scope: "- https://a.example.com\n- https://b.example.com",
         references: ["https://cwe.mitre.org/data/definitions/89.html", "https://owasp.org"],
       })
       expect(parsed.customFields).toEqual([])

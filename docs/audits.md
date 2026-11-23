@@ -20,6 +20,8 @@ It's possible to add Collaborators to an Audit, this will give write access to a
 
 The *Findings API key* of the section generates the key that lets a script or an MCP server create and edit the findings of this audit from outside the web interface, see [Findings API](findings-api.md).
 
+*Sections* turns the optional sections of the audit on and off: *Network Scan* (off for new audits, on for older audits holding scanned hosts) and *Test accounts* (on by default). A section turned off is hidden from the menu, keeps its data and is left out of the report.
+
 *Enable AI features* shows the AI assistant buttons in the finding editor of this audit, and *Prompt overrides* replaces the global prompts for this audit only, see [AI assistant](ai.md).
 
 ## Network Scan
@@ -36,6 +38,10 @@ At this point you may follow these steps:
 2. Select all the hosts associated with the scope
 3. Click the + symbol to effectively associate hosts with the scope
 4. Save
+
+## Test accounts
+
+Accounts given to the auditors for the test: target service (optional), username, password, 2FA secret (optional) and notes, one row per account. They are available in the report template as `testAccounts`, see [Docx Template](docxtemplate.md?id=testaccounts).
 
 ## Findings
 

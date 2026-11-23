@@ -11,6 +11,7 @@ export default [
         {path: '', redirect: 'general'},
         {path: 'general', name:'general', component: () => import('pages/audits/edit/general')},
         {path: 'network', name: 'network', component: () => import('pages/audits/edit/network')},
+        {path: 'accounts', name: 'accounts', component: () => import('pages/audits/edit/accounts')},
         {path: 'findings/add', name: 'addFindings', component: () => import('pages/audits/edit/findings/add')},
         {path: 'findings/:findingId', name: 'editFinding', component: () => import('pages/audits/edit/findings/edit')},
         {path: 'sections/:sectionId', name: 'editSection', component: () => import('pages/audits/edit/sections')}

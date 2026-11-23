@@ -325,6 +325,84 @@
                 <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.underline')" v-model="currentStyles.link.underline" :options="booleanOptions" emit-value map-options options-dense />
                 <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.rStyle')" v-model="currentStyles.link.rStyle" :placeholder="stylesDefault('link', 'rStyle')" clearable />
             </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Links to findings: {link}...{/link} -->
+            <div class="text-bold q-mb-sm">{{$t('styles.findingLinks')}}</div>
+            <div class="text-grey-8 q-mb-sm" v-html="$t('styles.findingLinksInfo')"></div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.findingLink.color" :placeholder="stylesDefault('findingLink', 'color')" clearable />
+                <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.underline')" v-model="currentStyles.findingLink.underline" :options="booleanOptions" emit-value map-options options-dense :hint="inheritHint('findingLink', 'underline')" />
+                <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.bold')" v-model="currentStyles.findingLink.bold" :options="booleanOptions" emit-value map-options options-dense />
+                <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.italic')" v-model="currentStyles.findingLink.italic" :options="booleanOptions" emit-value map-options options-dense />
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.rStyle')" v-model="currentStyles.findingLink.rStyle" :placeholder="stylesDefault('findingLink', 'rStyle')" clearable />
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Headings: {h1}..{h6} and the Heading 1-6 styles -->
+            <div class="text-bold q-mb-sm">{{$t('styles.headings')}}</div>
+            <div class="text-grey-8 q-mb-sm" v-html="$t('styles.headingsInfo')"></div>
+            <q-expansion-item
+                v-for="level in headingLevels"
+                :key="'h' + level"
+                dense
+                dense-toggle
+                expand-separator
+                :label="$t('styles.headingLevel', [level])"
+                :caption="'{h' + level + '}'"
+                header-class="bg-grey-2"
+            >
+                <div class="row q-col-gutter-sm q-pa-sm">
+                    <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.font')" v-model="currentStyles.headings[level].font" :placeholder="stylesDefault('headings', 'font', level)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="4" max="72" step="0.5" :label="$t('styles.size')" v-model.number="currentStyles.headings[level].size" :placeholder="stylesDefault('headings', 'size', level)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.headings[level].color" :placeholder="stylesDefault('headings', 'color', level)" clearable />
+                    <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.bold')" v-model="currentStyles.headings[level].bold" :options="booleanOptions" emit-value map-options options-dense />
+                    <q-select class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.italic')" v-model="currentStyles.headings[level].italic" :options="booleanOptions" emit-value map-options options-dense />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingBefore')" v-model.number="currentStyles.headings[level].spacingBefore" :placeholder="stylesDefault('headings', 'spacingBefore', level)" clearable />
+                    <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="0" max="200" :label="$t('styles.spacingAfter')" v-model.number="currentStyles.headings[level].spacingAfter" :placeholder="stylesDefault('headings', 'spacingAfter', level)" clearable />
+                </div>
+            </q-expansion-item>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Table of contents -->
+            <div class="text-bold q-mb-sm">{{$t('styles.toc')}}</div>
+            <div class="text-grey-8 q-mb-sm">{{$t('styles.tocInfo')}}</div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.font')" v-model="currentStyles.toc.font" :placeholder="stylesDefault('toc', 'font') === $t('styles.inherit') ? stylesDefault('profiles', 'font', 'text') : stylesDefault('toc', 'font')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label type="number" min="4" max="72" step="0.5" :label="$t('styles.size')" v-model.number="currentStyles.toc.size" :placeholder="stylesDefault('toc', 'size')" clearable />
+                <q-input class="col-md-2 col-6" dense outlined stack-label :label="$t('styles.color')" v-model="currentStyles.toc.color" :placeholder="stylesDefault('toc', 'color')" clearable />
+            </div>
+
+            <q-separator class="q-my-md" />
+
+            <!-- Severity colors and Legendary -->
+            <div class="text-bold q-mb-sm">{{$t('styles.severityColors')}}</div>
+            <div class="text-grey-8 q-mb-sm" v-html="$t('styles.severityColorsInfo')"></div>
+            <div class="row q-col-gutter-sm">
+                <q-input
+                    v-for="severity in severities"
+                    :key="severity.key"
+                    class="col-md-2 col-6"
+                    dense
+                    outlined
+                    stack-label
+                    :label="$t(severity.label)"
+                    v-model="currentStyles.severityColors[severity.key]"
+                    :placeholder="stylesDefault('severityColors', severity.key)"
+                    clearable
+                >
+                    <template v-slot:prepend>
+                        <div class="severity-swatch" :style="{background: '#' + (currentStyles.severityColors[severity.key] || stylesDefaults.severityColors && stylesDefaults.severityColors[severity.key] || 'FFFFFF').replace('#', '')}" />
+                    </template>
+                </q-input>
+            </div>
+            <div class="row items-center q-mt-sm">
+                <q-select class="col-md-4 col-8" dense outlined stack-label :label="$t('styles.legendary')" v-model="currentStyles.legendary" :options="booleanOptions" emit-value map-options options-dense :hint="inheritHint(null, 'legendary')" />
+            </div>
+            <div class="text-grey-8 q-mt-xs">{{$t('styles.legendaryInfo')}}</div>
         </q-card-section>
 
         <q-separator />

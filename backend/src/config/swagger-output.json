@@ -198,6 +198,12 @@
                 "aiEnabled": {
                   "example": "any"
                 },
+                "showNetwork": {
+                  "example": "any"
+                },
+                "showTestAccounts": {
+                  "example": "any"
+                },
                 "aiPrompts": {
                   "example": "any"
                 }
@@ -275,6 +281,50 @@
               "type": "object",
               "properties": {
                 "scope": {
+                  "example": "any"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/api/audits/{auditId}/accounts": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {}
+      },
+      "put": {
+        "tags": [
+          "Audit"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "testAccounts": {
                   "example": "any"
                 }
               }

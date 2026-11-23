@@ -48,6 +48,16 @@ var Host = {
     services:   [Service]
 }
 
+// Account given to the auditors for the test, listed in the report
+var TestAccount = {
+    _id:        false,
+    service:    String, // target service (optional)
+    username:   String,
+    password:   String,
+    otpSecret:  String, // 2FA secret (optional)
+    notes:      String
+}
+
 var SortOption = {
     _id:        false,
     category:   String,
@@ -85,6 +95,12 @@ var AuditSchema = new Schema({
     // with prompts overriding the global ones by field key
     aiEnabled:          {type: Boolean, default: false},
     aiPrompts:          {type: Schema.Types.Mixed, default: {}},
+    // Optional sections of the audit, switched in General Information. showNetwork
+    // has no default: audits saved before the switch show the Network Scan when
+    // they hold scanned hosts (lib/utils.networkEnabled), new audits hide it.
+    showNetwork:        Boolean,
+    showTestAccounts:   {type: Boolean, default: true},
+    testAccounts:       [TestAccount],
 }, {timestamps: true});
 
 /*
@@ -177,6 +193,7 @@ AuditSchema.statics.create = (audit, userId) => {
         audit.creator = userId
         audit.sections = []
         audit.customFields = []
+        if (typeof audit.showNetwork !== 'boolean') audit.showNetwork = false
 
         var auditTypeSections = []
         var customSections = []
@@ -322,11 +339,14 @@ AuditSchema.statics.getGeneral = (isAdmin, auditId, userId) => {
         query.populate('collaborators', 'username firstname lastname')
         query.populate('reviewers', 'username firstname lastname')
         query.populate('company')
-        query.select('name auditType date date_start date_end client collaborators language scope.name template customFields aiEnabled aiPrompts')
+        query.select('name auditType date date_start date_end client collaborators language scope template customFields aiEnabled aiPrompts showNetwork showTestAccounts')
         query.lean().exec()
         .then((row) => {
             if (!row)
                 throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'});
+
+            row.showNetwork = require('../lib/utils').networkEnabled(row)
+            row.showTestAccounts = row.showTestAccounts !== false
 
             var formatScope = row.scope.map(item => {return item.name})
             for (var i=0;i<formatScope.length;i++) {
@@ -400,6 +420,43 @@ AuditSchema.statics.updateNetwork = (isAdmin, auditId, userId, scope) => {
                 throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
 
             resolve("Audit Network updated successfully")
+        })
+        .catch((err) => {
+            reject(err)
+        })
+    })
+}
+
+// Get audit test accounts
+AuditSchema.statics.getTestAccounts = (isAdmin, auditId, userId) => {
+    return new Promise((resolve, reject) => {
+        var query = Audit.findById(auditId)
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}, {reviewers: userId}])
+        query.select('testAccounts showTestAccounts')
+        query.lean().exec()
+        .then((row) => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+            resolve({testAccounts: row.testAccounts || [], showTestAccounts: row.showTestAccounts !== false})
+        })
+        .catch((err) => {
+            reject(err)
+        })
+    })
+}
+
+// Update audit test accounts
+AuditSchema.statics.updateTestAccounts = (isAdmin, auditId, userId, update) => {
+    return new Promise((resolve, reject) => {
+        var query = Audit.findByIdAndUpdate(auditId, update)
+        if (!isAdmin)
+            query.or([{creator: userId}, {collaborators: userId}])
+        query.exec()
+        .then(row => {
+            if (!row)
+                throw({fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'})
+            resolve("Audit test accounts updated successfully")
         })
         .catch((err) => {
             reject(err)
@@ -881,6 +938,9 @@ AuditSchema.statics.clone = (auditId, newName, userId) => {
                 sortFindings: sourceAudit.sortFindings,
                 aiEnabled: sourceAudit.aiEnabled,
                 aiPrompts: sourceAudit.aiPrompts,
+                showNetwork: require('../lib/utils').networkEnabled(sourceAudit),
+                showTestAccounts: sourceAudit.showTestAccounts !== false,
+                testAccounts: sourceAudit.testAccounts,
                 creator: userId,
                 state: 'EDIT' // Reset state to EDIT for new audit
             });

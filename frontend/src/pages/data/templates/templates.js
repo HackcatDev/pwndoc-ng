@@ -48,8 +48,18 @@ export default {
             templateId: '',
             // Formatting styles (fonts used by convertHTML) of the selected template
             stylesTemplate: null,
-            stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}},
-            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null},
+            stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, toc: {}, headings: {}, findingLink: {}, severityColors: {}},
+            currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null,
+                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null},
+            headingLevels: ['1', '2', '3', '4', '5', '6'],
+            severities: [
+                {key: 'none', label: 'styles.severityNone'},
+                {key: 'low', label: 'styles.severityLow'},
+                {key: 'medium', label: 'styles.severityMedium'},
+                {key: 'high', label: 'styles.severityHigh'},
+                {key: 'critical', label: 'styles.severityCritical'},
+                {key: 'legendary', label: 'styles.severityLegendary'}
+            ],
             newProfileName: '',
             stylesFields: {
                 profile: ['font', 'size', 'color', 'bold', 'italic', 'alignment', 'shading', 'spacingBefore', 'spacingAfter', 'lineSpacing', 'pStyle'],
@@ -269,7 +279,8 @@ export default {
         // ---- Formatting styles (per template) ----
 
         emptyStyles: function() {
-            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null}
+            return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null,
+                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null}
         },
 
         openStyles: function(row) {
@@ -290,6 +301,11 @@ export default {
                 styles.highlightSyntax = (typeof saved.highlightSyntax === 'boolean') ? saved.highlightSyntax : null
                 styles.listNumbering = saved.listNumbering || null
                 styles.imageSpacing = (typeof saved.imageSpacing === 'boolean') ? saved.imageSpacing : null
+                styles.toc = Object.assign({}, saved.toc || {})
+                styles.findingLink = Object.assign({}, saved.findingLink || {})
+                styles.severityColors = Object.assign({}, saved.severityColors || {})
+                this.headingLevels.forEach(level => { styles.headings[level] = Object.assign({}, (saved.headings || {})[level] || {}) })
+                styles.legendary = (typeof saved.legendary === 'boolean') ? saved.legendary : null
                 this.currentStyles = styles
                 this.$refs.stylesModal.show()
             })
@@ -305,11 +321,17 @@ export default {
 
         // Placeholder showing the value inherited from the global configuration
         stylesDefault: function(section, field, profileName) {
-            var src = section === 'profiles' ? ((this.stylesDefaults.profiles || {})[profileName] || {}) : (this.stylesDefaults[section] || {})
+            var src = (section === 'profiles' || section === 'headings') ? ((this.stylesDefaults[section] || {})[profileName] || {}) : (this.stylesDefaults[section] || {})
             var v = src[field]
             if (v === undefined || v === null || v === '') return $t('styles.inherit')
             if (typeof v === 'boolean') return v ? $t('styles.yes') : $t('styles.no')
             return String(v)
+        },
+
+        // Hint of a yes / no select: the value inherited from the configuration
+        inheritHint: function(section, field) {
+            var src = section ? (this.stylesDefaults[section] || {}) : this.stylesDefaults
+            return $t('styles.inherit') + ': ' + (src[field] === true ? $t('styles.yes') : $t('styles.no'))
         },
 
         addProfile: function() {
@@ -350,6 +372,20 @@ export default {
             if (typeof styles.highlightSyntax === 'boolean') result.highlightSyntax = styles.highlightSyntax
             if (styles.listNumbering) result.listNumbering = styles.listNumbering
             if (typeof styles.imageSpacing === 'boolean') result.imageSpacing = styles.imageSpacing
+            var cleanColor = (v) => (v === null || v === undefined) ? '' : String(v).replace('#', '').trim()
+            result.toc = cleanSection(styles.toc)
+            result.findingLink = cleanSection(styles.findingLink)
+            result.headings = {}
+            this.headingLevels.forEach(level => {
+                var h = cleanSection((styles.headings || {})[level])
+                if (Object.keys(h).length) result.headings[level] = h
+            })
+            result.severityColors = {}
+            Object.keys(styles.severityColors || {}).forEach(k => {
+                var c = cleanColor(styles.severityColors[k])
+                if (c) result.severityColors[k] = c
+            })
+            if (typeof styles.legendary === 'boolean') result.legendary = styles.legendary
             return result
         },
 

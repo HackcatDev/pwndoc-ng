@@ -45,7 +45,7 @@ There is a tag filter *convertHTML* that convert HTML to open office XML for dir
 To handle images, HTML values with images are converted into an array of text and images
 
 ```
-// HTML without images (eg: affected scope in finding)
+// Affected assets of a finding: plain text, one paragraph per line, no link
 -> {@affected | convertHTML} // this must be the only thing in the paragraph
 
 // HTML with images (eg: poc in a finding)
@@ -76,6 +76,41 @@ Put the tag alone in a paragraph of the cell to color:
 ```
 
 The paragraph holding the tag disappears and the shading is merged into the cell properties (the whole cell is colored, the row keeps its natural height). This replaces the pattern of repeating the cell content inside `{#cvss.baseSeverity == '...'}` conditions with different text highlights.
+
+Several cells of a row can carry the tag, e.g. the identifier and the score of a finding. The colors are the *Severity colors* of the template's Report formatting, the CVSS colors of *Settings > Report* otherwise.
+
+**Legendary severity**: with *Enable Legendary severity* in the Report formatting of the template, the Critical findings scored 9.5 or more get the severity `Legendary` (`cvss.baseSeverity`, `temporalSeverity` and `environmentalSeverity`, according to the matching score, and `cvss.legendary` is true). Their `cellColor` cells take the Legendary color and the text of those cells, like the word *Legendary* anywhere in the document, is painted in rainbow colors. `{findings | count:'Critical'}` counts them with the Critical ones, `{findings | count:'Legendary'}` counts them alone.
+
+### Headings and links to findings
+
+Paragraph tags, that can be anywhere in the paragraph and keep the formatting of the template text around them:
+
+* `{h1}` ... `{h6}`: the paragraph becomes a heading of that level (style *Heading N*, created when the template lacks it, with its outline level, so that it appears at the right level of the table of contents). Inside a finding loop, the heading is also the target of the links to the finding.
+* `{anchor}`: target of the links to the current finding, for templates without finding headings.
+* `{link}`...`{/link}`: inside a finding loop, the text in between becomes a link to the heading (or anchor) of that finding. Both tags must be in the same paragraph.
+
+```
+Key risks table:    {#findings}{link}{title}{/link}{/findings}
+Detailed findings:  {#findings}{h2}{title} ... {/findings}
+```
+
+The formatting of the headings (font, size, color, bold, italic, spacing for each level) and of the links is set in the Report formatting of the template, see [Styles](docxtemplate.md?id=formatting-of-converted-html). The bookmarks are named after the identifier of the finding (`Finding_IDX_001`).
+
+### Charts drawn in Word
+
+A chart inserted in Word keeps its data in an embedded workbook. Tags written in the cells of that workbook (*Edit data* in Word) are evaluated when the report is generated, the numbers are written back as numbers and the values cached in the chart (what Word, LibreOffice and Google Docs display) are rebuilt, so that no update is needed after the generation:
+
+```
+|          | Findings summary               |
+| Critical | {findings | count:'Critical'}  |
+| High     | {findings | count:'High'}      |
+| Medium   | {findings | count:'Medium'}    |
+| Low      | {findings | count:'Low'}       |
+```
+
+A cell can mix text and tags (`Critical ({findings | count:'Critical'})`). Tags in the chart title are evaluated too.
+
+In a chart that holds tags, the categories whose value is 0 (or empty) in every series are removed, with the colors and labels of their points, so that a pie chart has no label for an empty slice. A chart without tags is left as drawn.
 
 ### Removing table rows when a value is empty or zero
 
@@ -222,6 +257,25 @@ Network Scan:
 {/hosts}{/scope}
 >```
 
+### testAccounts
+Accounts provided for the test (section *Test accounts* of the audit), empty when the section is turned off in General Information. Array of Objects:
+* **testAccounts[i].index** (1, 2, ...)
+* **testAccounts[i].service** (optional target service)
+* **testAccounts[i].username**
+* **testAccounts[i].password**
+* **testAccounts[i].otpSecret** (optional 2FA secret)
+* **testAccounts[i].notes**
+
+`showTestAccounts` and `showNetwork` tell whether the sections are turned on; the hosts of `scope` are empty when the Network Scan is off.
+
+> Use in template document (table rows)
+>```
+{#testAccounts.length}
+| Target service                  | Username   | Password   | 2FA secret  | Notes                    |
+| {#testAccounts}{service}        | {username} | {password} | {otpSecret} | {notes}{/testAccounts}   |
+{/testAccounts.length}
+>```
+
 ### findings
 List of findings. Array of Objects:
 * **findings[i].title**
@@ -244,7 +298,8 @@ List of findings. Array of Objects:
 * **findings[i].remediation.cellColorComplexity** / **findings[i].remediation.cellColorPriority**
 * **findings[i].cvssObj** (Object of cvss Criterias)
 * **findings[i].poc** (HTML with images)
-* **findings[i].affected** (HTML without images)
+* **findings[i].affected** (affected assets: plain text as HTML paragraphs, one per line, for `{@affected | convertHTML}`; no formatting, no link)
+* **findings[i].affectedText** (the same as plain text) / **findings[i].affectedLines** (Array of the non-empty lines)
 * **findings[i].status** (Number 0:done, 1:redacting)
 * **findings[i].category**
 * **findings[i].identifier**
@@ -328,7 +383,12 @@ Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a
 | `highlightSyntax` | code blocks | `true` to color tokens with `syntaxColors` (light palette by default) |
 | `profiles.references` | `{@field \| convertLines}` | same |
 | `imageSpacing` | images of the document | `true` (default): blank line between text and an image and after its caption (after the image when it has no caption), unless there is one already; `false`: images are left as the template places them |
-| `listNumbering` | bullet / numbered lists | `auto` (default): self-contained list definitions are added to the document, every numbered list restarts at 1; `template`: use `numId` 1 (bullets) and 2 (numbered) of the template's *numbering.xml* as described below |
+| `listNumbering` | bullet / numbered lists | `auto` (default): self-contained list definitions are added to the document, a numbered list restarts at 1 unless it starts with another number (`4.` in Markdown, `<ol start="4">`): then it continues the previous list of the field when it follows its last item (steps interrupted by a code block), or starts at that number; `template`: use `numId` 1 (bullets) and 2 (numbered) of the template's *numbering.xml* as described below |
+| `toc` | table of contents (TOC 1-9 styles, page numbers included, once the field is updated) | font (default: the font of `profiles.text`), size, color |
+| `headings` | Heading 1-6 styles and the `{h1}`..`{h6}` paragraphs, by level (`"1"`..`"6"`) | font, size, color, bold, italic, spacingBefore, spacingAfter |
+| `findingLink` | `{link}...{/link}` | color (default `0563C1`), underline (default `true`), bold, italic, rStyle |
+| `severityColors` | `{@cvss.cellColor}` and the other severity cell colors | none, low, medium, high, critical, legendary (default: the CVSS colors of the settings, `2D0A4E` for legendary) |
+| `legendary` | severities | `true`: Critical findings scored 9.5 or more are Legendary (default `false`) |
 
 Colors are hex RGB with or without `#`. The name given to `convertHTML` that does not match a profile is used as a Word paragraph style id (previous behaviour).
 
@@ -497,7 +557,7 @@ Convert a list of lines (an array of strings, e.g. `references`, or a multiline 
 
 ### count
 
-Count the number of vulnerabilities by CVSS severity. The optional second argument selects the score: `'base'`, `'temporal'` or `'environmental'` (default).
+Count the number of vulnerabilities by CVSS severity. The optional second argument selects the score: `'base'`, `'temporal'` or `'environmental'` (default). `'Critical'` includes the [Legendary](docxtemplate.md?id=table-cell-colors) findings, `'Legendary'` counts them alone.
 Since `0` is falsy the filter can also drive a condition or [remove a table row](docxtemplate.md?id=removing-table-rows-when-a-value-is-empty-or-zero).
 
 > Use in template document

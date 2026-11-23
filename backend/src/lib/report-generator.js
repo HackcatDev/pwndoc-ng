@@ -11,6 +11,10 @@ var html2ooxml = require('./html2ooxml');
 var reportStyles = require('./report-styles');
 var ooxmlPostprocess = require('./ooxml-postprocess');
 var numbering = require('./numbering');
+var templateStyles = require('./template-styles');
+var reportMarkers = require('./report-markers');
+var chartData = require('./chart-data');
+var plainText = require('./plain-text');
 var _ = require('lodash');
 var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
@@ -33,6 +37,37 @@ var numberingCtx = null // List definitions added to the template (null: use the
 
 const encodeHTMLEntities = s => s.replace(/[\u00A0-\u9999<>&]/g, i => '&#'+i.charCodeAt(0)+';')
 
+// Severity of the findings scored 9.5 or more when the template enables it
+const LEGENDARY = 'Legendary'
+const LEGENDARY_SCORE = 9.5
+
+// Image module with a border per image: the {%image} of an {#images} loop
+// gets the outline stored with the image by the editor ({border: {width, color}})
+class PwndocImageModule extends ImageModule {
+    render(part, options) {
+        var result = super.render(part, options)
+        if (!result || typeof result.value !== 'string' || result.value.indexOf('<w:drawing') === -1) return result
+        var border = null
+        // the parsers are cached by part index: a distinct one for this lookup
+        try { border = options.scopeManager.getValue('border', {part: Object.assign({}, part, {lIndex: 'pwd-border-' + part.lIndex})}) } catch (err) { border = null }
+        var outline = imageOutlineXml(border)
+        if (outline) result.value = result.value.replace(/<a:ln>[\s\S]*?<\/a:ln>/, outline)
+        return result
+    }
+}
+
+// <a:ln> of an image border {width (px), color (hex)}, null when there is none
+function imageOutlineXml(border) {
+    if (!border || typeof border !== 'object') return null
+    var width = Number(border.width)
+    if (!isFinite(width) || width <= 0) return null
+    width = Math.min(width, 20)
+    var color = String(border.color || '').replace('#', '').toUpperCase()
+    if (!/^[0-9A-F]{6}$/.test(color)) color = '000000'
+    return `<a:ln w="${Math.round(width * 9525)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln>`
+}
+exports.imageOutlineXml = imageOutlineXml
+
 // Generate document with docxtemplater
 async function generateDoc(audit) {
 
@@ -48,8 +83,14 @@ async function generateDoc(audit) {
     zip = new PizZip(content);
 
     // Formatting used by convertHTML: config/report-styles.json overridden by the template settings
-    var templateStyles = audit.template && (typeof audit.template.toObject === 'function' ? audit.template.toObject().styles : audit.template.styles)
-    currentStyles = reportStyles.resolve(templateStyles)
+    var stylesOfTemplate = audit.template && (typeof audit.template.toObject === 'function' ? audit.template.toObject().styles : audit.template.styles)
+    currentStyles = reportStyles.resolve(stylesOfTemplate)
+    // TOC and heading styles of the template (fonts of the table of contents, {h1}..{h6})
+    try {
+        templateStyles.apply(zip, currentStyles)
+    } catch (err) {
+        console.log('template-styles: cannot update the template styles', err)
+    }
     currentStyles.templateStyleIds = getTemplateStyleIds(zip)
 
     // List definitions: self-contained (default) or the template's numId 1 / 2
@@ -117,13 +158,13 @@ async function generateDoc(audit) {
         opts.border = settings.report.private.imageBorderColor.replace('#', '')
 
     try {
-        var imageModule = new ImageModule(opts);
+        var imageModule = new PwndocImageModule(opts);
     }
     catch(err) {
         console.log(err)
     }
     var doc = new Docxtemplater(zip, {
-        modules: [imageModule],
+        modules: [imageModule, new reportMarkers.MarkerModule()],
         parser: parser,
         paragraphLoop: true
     });
@@ -154,10 +195,28 @@ async function generateDoc(audit) {
         }
     }
 
-    // Merge cell shading fragments ({@cvss.cellColor}...) into the cells' own properties
+    // Data of the native charts: tags in their embedded workbook ({findings | count:'Critical'})
+    try {
+        chartData.processCharts(doc.getZip(), function(expr) {
+            return angularParser(expr).get(preppedAudit, {scopeList: [preppedAudit], num: 0})
+        })
+    } catch (err) {
+        console.log('chart-data: cannot process the charts', err)
+    }
+
+    // Merge cell shading fragments ({@cvss.cellColor}...) into the cells' own properties,
+    // apply {h1}..{h6}, {anchor}, {link}...{/link} and the Legendary colors,
     // and add a blank line around the images (between the text and an image,
     // after the caption) unless the report styles turn it off
-    ooxmlPostprocess.processZip(doc.getZip(), {imageSpacing: currentStyles.imageSpacing !== false});
+    ooxmlPostprocess.processZip(doc.getZip(), {
+        imageSpacing: currentStyles.imageSpacing !== false,
+        markers: {
+            headings: currentStyles.headings || {},
+            findingLink: currentStyles.findingLink || {},
+            legendary: !!currentStyles.legendary,
+            legendaryLabel: LEGENDARY
+        }
+    });
 
     // Include refs in document
     const relsPath = "word/_rels/document.xml.rels";
@@ -604,13 +663,14 @@ expressions.filters.convertHTML = function(input, style, listIds) {
     var styles = currentStyles || reportStyles.resolve()
     var html = String(input).replace(/(<p><\/p>)+$/, '')
 
-    // One numbering instance per ordered list so that each list restarts at 1
+    // One numbering instance per ordered list, allocated on demand: a list
+    // restarts at 1 (or at its start number) unless it continues the previous one
+    var options = { styles: styles }
     if (numberingCtx && listIdsArray.length === 0) {
-        var olCount = (html.match(/<ol[\s>]/g) || []).length
-        for (var i = 0; i < olCount; i++) listIdsArray.push(numbering.allocateOrderedList(zip, numberingCtx))
+        options.allocateList = function(start) { return numbering.allocateOrderedList(zip, numberingCtx, start) }
     }
 
-    return html2ooxml(html, style, listIdsArray, { styles: styles })
+    return html2ooxml(html, style, listIdsArray, options)
 }
 
 // Lines of a list field (references...): trimmed, empty lines dropped, so that
@@ -811,7 +871,9 @@ expressions.filters.count = function(input, severity, scoreType) {
     }
     for(var i = 0; i < input.length; i++){
         var cvss = input[i] && input[i].cvss
-        if(cvss && cvss[scoreAttribute] === severity){
+        var value = cvss && cvss[scoreAttribute]
+        // Legendary findings are Critical ones: counted by 'Critical' and by 'Legendary'
+        if(value === severity || (severity === 'Critical' && value === LEGENDARY)){
             count += 1;
         }
     }
@@ -839,7 +901,7 @@ expressions.filters.pieChart = function(input, title, colorCrit, colorHigh, colo
 
     for(var i = 0; i < input.length; i++){
 
-        if(input[i].cvss["baseSeverity"] === "Critical"){
+        if(input[i].cvss["baseSeverity"] === "Critical" || input[i].cvss["baseSeverity"] === LEGENDARY){
             countCritical += 1;
         } else if(input[i].cvss["baseSeverity"] === "High"){
             countHigh += 1;
@@ -1042,6 +1104,11 @@ function parser(tag) {
             }
         }
     }
+    // {h1}..{h6}, {anchor}, {link}, {/link}: rendered by reportMarkers.MarkerModule,
+    // compiled here only because docxtemplater compiles every tag
+    if (reportMarkers.TAG_REGEX.test(tag)) {
+        return { get() { return '' } }
+    }
     // We use the angularParser as the default fallback
     // If you don't wish to use the angularParser,
     // you can use the default parser as documented here:
@@ -1200,18 +1267,35 @@ function stripParagraphTags(input) {
         .trim();
 }
 async function prepAuditData(data, settings) {
-    /** CVSS Colors for table cells */
-    var noneColor = settings.report.public.cvssColors.noneColor.replace('#', ''); //default of blue ("#4A86E8")
-    var lowColor = settings.report.public.cvssColors.lowColor.replace('#', ''); //default of green ("#008000")
-    var mediumColor = settings.report.public.cvssColors.mediumColor.replace('#', ''); //default of yellow ("#f9a009")
-    var highColor = settings.report.public.cvssColors.highColor.replace('#', ''); //default of red ("#fe0000")
-    var criticalColor = settings.report.public.cvssColors.criticalColor.replace('#', ''); //default of black ("#212121")
+    /** CVSS Colors for table cells: report formatting of the template, else the settings */
+    var severityColors = Object.assign(
+        {none: '4A86E8', low: '008000', medium: 'F9A009', high: 'FE0000', critical: '212121', legendary: '2D0A4E'},
+        reportStyles.severityColorsFromSettings(settings),
+        (currentStyles && currentStyles.severityColors) || {}
+    )
+    var legendaryEnabled = !!(currentStyles && currentStyles.legendary)
+    var cellShading = function(color) { return '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="' + color + '"/></w:tcPr>' }
 
-    var cellNoneColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="' + noneColor + '"/></w:tcPr>';
-    var cellLowColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="'+lowColor+'"/></w:tcPr>';
-    var cellMediumColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="'+mediumColor+'"/></w:tcPr>';
-    var cellHighColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="'+highColor+'"/></w:tcPr>';
-    var cellCriticalColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="'+criticalColor+'"/></w:tcPr>';
+    var cellNoneColor = cellShading(severityColors.none);
+    var cellLowColor = cellShading(severityColors.low);
+    var cellMediumColor = cellShading(severityColors.medium);
+    var cellHighColor = cellShading(severityColors.high);
+    var cellCriticalColor = cellShading(severityColors.critical);
+    // the flag tells the post-processing to paint the text of the cell in rainbow colors
+    var cellLegendaryColor = '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="' + severityColors.legendary + '"/>' + reportMarkers.LEGENDARY_FLAG + '</w:tcPr>';
+    var cellColorOf = function(severity) {
+        if (severity === "Low") return cellLowColor
+        if (severity === "Medium") return cellMediumColor
+        if (severity === "High") return cellHighColor
+        if (severity === "Critical") return cellCriticalColor
+        if (severity === LEGENDARY) return cellLegendaryColor
+        return cellNoneColor
+    }
+    // Critical findings scored 9.5 or more are Legendary when the template enables it
+    var legendarySeverity = function(severity, score) {
+        if (legendaryEnabled && severity === "Critical" && Number(score) >= LEGENDARY_SCORE) return LEGENDARY
+        return severity
+    }
 
     /** Remediation complexity  Colors for table cells */
     
@@ -1302,7 +1386,25 @@ async function prepAuditData(data, settings) {
 
 
     result.language = data.language || "undefined"
-    result.scope = data.scope.toObject() || []
+    // Sections turned off in General Information stay out of the report
+    result.showNetwork = utils.networkEnabled(data)
+    result.showTestAccounts = data.showTestAccounts !== false
+    result.scope = (data.scope.toObject() || []).map(item => {
+        if (!result.showNetwork) return Object.assign({}, item, {hosts: []})
+        return item
+    })
+    // Test accounts: {#testAccounts}{service}{username}{password}{otpSecret}{notes}{/testAccounts}
+    result.testAccounts = []
+    if (result.showTestAccounts && Array.isArray(data.testAccounts)) {
+        result.testAccounts = data.testAccounts.map((account, index) => ({
+            index: index + 1,
+            service: account.service || "",
+            username: account.username || "",
+            password: account.password || "",
+            otpSecret: account.otpSecret || "",
+            notes: account.notes || ""
+        }))
+    }
 
     result.findings = []
     for (finding of data.findings) {
@@ -1317,8 +1419,11 @@ async function prepAuditData(data, settings) {
             priority: finding.priority || "",
             references: cleanLines(finding.references),
             poc: await splitHTMLParagraphs(finding.poc),
-            affected: finding.scope || "",
-            //affected: stripParagraphTags(finding.scope) || [],
+            // Affected assets are plain text: one paragraph per line, no formatting,
+            // no links ({@affected | convertHTML}); affectedText / affectedLines raw
+            affected: plainText.textToHtml(finding.scope),
+            affectedText: plainText.toPlainText(finding.scope),
+            affectedLines: plainText.toLines(finding.scope),
             status: finding.status || "",
             category: $t(finding.category) || $t("No Category"),
             identifier: "IDX-" + utils.lPad(finding.identifier),
@@ -1342,12 +1447,13 @@ async function prepAuditData(data, settings) {
         tmpFinding.cvss = {
             vectorString: tmpCVSS.vectorString || "",
             baseMetricScore: tmpCVSS.baseMetricScore || "",
-            baseSeverity: tmpCVSS.baseSeverity || "",
+            baseSeverity: legendarySeverity(tmpCVSS.baseSeverity, tmpCVSS.baseMetricScore) || "",
             temporalMetricScore: tmpCVSS.temporalMetricScore || "",
-            temporalSeverity: tmpCVSS.temporalSeverity || "",
+            temporalSeverity: legendarySeverity(tmpCVSS.temporalSeverity, tmpCVSS.temporalMetricScore) || "",
             environmentalMetricScore: tmpCVSS.environmentalMetricScore || "",
-            environmentalSeverity: tmpCVSS.environmentalSeverity || ""
+            environmentalSeverity: legendarySeverity(tmpCVSS.environmentalSeverity, tmpCVSS.environmentalMetricScore) || ""
         }
+        tmpFinding.cvss.legendary = tmpFinding.cvss.baseSeverity === LEGENDARY
         if (tmpCVSS.baseImpact)
             tmpFinding.cvss.baseImpact = CVSS31.roundUp1(tmpCVSS.baseImpact)
         else
@@ -1366,23 +1472,9 @@ async function prepAuditData(data, settings) {
         else
             tmpFinding.cvss.environmentalModifiedExploitability = ""
 
-        if (tmpCVSS.baseSeverity === "Low") tmpFinding.cvss.cellColor = cellLowColor
-        else if (tmpCVSS.baseSeverity === "Medium") tmpFinding.cvss.cellColor = cellMediumColor
-        else if (tmpCVSS.baseSeverity === "High") tmpFinding.cvss.cellColor = cellHighColor
-        else if (tmpCVSS.baseSeverity === "Critical") tmpFinding.cvss.cellColor = cellCriticalColor
-        else tmpFinding.cvss.cellColor = cellNoneColor
-
-        if (tmpCVSS.temporalSeverity === "Low") tmpFinding.cvss.temporalCellColor = cellLowColor
-        else if (tmpCVSS.temporalSeverity === "Medium") tmpFinding.cvss.temporalCellColor = cellMediumColor
-        else if (tmpCVSS.temporalSeverity === "High") tmpFinding.cvss.temporalCellColor = cellHighColor
-        else if (tmpCVSS.temporalSeverity === "Critical") tmpFinding.cvss.temporalCellColor = cellCriticalColor
-        else tmpFinding.cvss.temporalCellColor = cellNoneColor
-
-        if (tmpCVSS.environmentalSeverity === "Low") tmpFinding.cvss.environmentalCellColor = cellLowColor
-        else if (tmpCVSS.environmentalSeverity === "Medium") tmpFinding.cvss.environmentalCellColor = cellMediumColor
-        else if (tmpCVSS.environmentalSeverity === "High") tmpFinding.cvss.environmentalCellColor = cellHighColor
-        else if (tmpCVSS.environmentalSeverity === "Critical") tmpFinding.cvss.environmentalCellColor = cellCriticalColor
-        else tmpFinding.cvss.environmentalCellColor = cellNoneColor
+        tmpFinding.cvss.cellColor = cellColorOf(tmpFinding.cvss.baseSeverity)
+        tmpFinding.cvss.temporalCellColor = cellColorOf(tmpFinding.cvss.temporalSeverity)
+        tmpFinding.cvss.environmentalCellColor = cellColorOf(tmpFinding.cvss.environmentalSeverity)
 
         tmpFinding.cvssObj = cvssStrToObject(tmpCVSS.vectorString)
 
@@ -1467,9 +1559,16 @@ async function splitHTMLParagraphs(data) {
                     src = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
                 }
             }
+            // Border set in the editor (data-border-width in px, data-border-color)
+            var borderWidth = value.match(/data-border-width="([^"]*)"/)
+            var borderColor = value.match(/data-border-color="([^"]*)"/)
+            var border = null
+            if (borderWidth && parseFloat(borderWidth[1]) > 0)
+                border = {width: parseFloat(borderWidth[1]), color: borderColor ? borderColor[1].replace('#', '') : '000000'}
+
             if (result.length === 0)
                 result.push({text: "", images: []})
-            result[result.length-1].images.push({image: src, caption: alt})
+            result[result.length-1].images.push({image: src, caption: alt, border: border})
         }
         else if (value === "") {
             continue

@@ -6,6 +6,7 @@ module.exports = function(app, io) {
     var reportGenerator = require('../lib/report-generator');
     var _ = require('lodash');
     var utils = require('../lib/utils');
+    var plainText = require('../lib/plain-text');
     var Settings = require('mongoose').model('Settings');
 
     /* ### AUDITS LIST ### */
@@ -114,7 +115,13 @@ module.exports = function(app, io) {
         // #swagger.tags = ['Audit']
 
         Audit.getAudit(acl.isAllowed(req.decodedToken.role, 'audits:read-all'), req.params.auditId, req.decodedToken.id)
-        .then(msg => Response.Ok(res, msg))
+        .then(audit => {
+            // effective state of the optional sections (see lib/utils.networkEnabled)
+            var result = audit.toObject()
+            result.showNetwork = utils.networkEnabled(result)
+            result.showTestAccounts = result.showTestAccounts !== false
+            Response.Ok(res, result)
+        })
         .catch(err => Response.Internal(res, err))
     });
 
@@ -218,6 +225,8 @@ module.exports = function(app, io) {
         if (req.body.template) update.template = req.body.template;
         if (req.body.customFields) update.customFields = req.body.customFields;
         if (typeof req.body.aiEnabled === 'boolean') update.aiEnabled = req.body.aiEnabled;
+        if (typeof req.body.showNetwork === 'boolean') update.showNetwork = req.body.showNetwork;
+        if (typeof req.body.showTestAccounts === 'boolean') update.showTestAccounts = req.body.showTestAccounts;
         if (req.body.aiPrompts !== undefined) {
             var promptErrors = []
             update.aiPrompts = require('../lib/ai').parsePrompts(req.body.aiPrompts, promptErrors)
@@ -287,6 +296,50 @@ module.exports = function(app, io) {
         .catch(err => Response.Internal(res, err))
     });
 
+    // Get audit test accounts
+    app.get("/api/audits/:auditId/accounts", acl.hasPermission('audits:read'), function(req, res) {
+        // #swagger.tags = ['Audit']
+
+        Audit.getTestAccounts(acl.isAllowed(req.decodedToken.role, 'audits:read-all'), req.params.auditId, req.decodedToken.id)
+        .then(msg => Response.Ok(res, msg))
+        .catch(err => Response.Internal(res, err))
+    });
+
+    // Update audit test accounts
+    app.put("/api/audits/:auditId/accounts", acl.hasPermission('audits:update'), async function(req, res) {
+        // #swagger.tags = ['Audit']
+
+        var settings = await Settings.getAll();
+
+        var audit = await Audit.getAudit(acl.isAllowed(req.decodedToken.role, 'audits:read-all'), req.params.auditId, req.decodedToken.id);
+        if (settings.reviews.enabled && audit.state !== "EDIT") {
+            Response.Forbidden(res, "The audit is not in the EDIT state and therefore cannot be edited.");
+            return;
+        }
+        if (!Array.isArray(req.body.testAccounts)) {
+            Response.BadParameters(res, 'Missing required parameters: testAccounts');
+            return;
+        }
+
+        var text = (value) => (value === undefined || value === null) ? '' : String(value).substring(0, 4096)
+        var update = {
+            testAccounts: req.body.testAccounts
+            .filter(account => account && typeof account === 'object')
+            .map(account => ({
+                service: text(account.service),
+                username: text(account.username),
+                password: text(account.password),
+                otpSecret: text(account.otpSecret),
+                notes: text(account.notes)
+            }))
+        };
+        if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) update.approvals = [];
+
+        Audit.updateTestAccounts(acl.isAllowed(req.decodedToken.role, 'audits:update-all'), req.params.auditId, req.decodedToken.id, update)
+        .then(msg => Response.Ok(res, msg))
+        .catch(err => Response.Internal(res, err))
+    });
+
     // Add finding to audit
     app.post("/api/audits/:auditId/findings", acl.hasPermission('audits:update'), async function(req, res) {
         // #swagger.tags = ['Audit']
@@ -316,7 +369,7 @@ module.exports = function(app, io) {
         if (req.body.references) finding.references = req.body.references;
         if (req.body.cvssv3) finding.cvssv3 = req.body.cvssv3;
         if (req.body.poc) finding.poc = req.body.poc;
-        if (req.body.scope) finding.scope = req.body.scope;
+        if (req.body.scope) finding.scope = plainText.toPlainText(req.body.scope); // affected assets: plain text
         if (req.body.status !== undefined) finding.status = req.body.status;
         if (req.body.category) finding.category = req.body.category
         if (req.body.customFields) finding.customFields = req.body.customFields
@@ -365,7 +418,7 @@ module.exports = function(app, io) {
         if (req.body.references) finding.references = req.body.references;
         if (req.body.cvssv3) finding.cvssv3 = req.body.cvssv3;
         if (!_.isNil(req.body.poc)) finding.poc = req.body.poc;
-        if (!_.isNil(req.body.scope)) finding.scope = req.body.scope;
+        if (!_.isNil(req.body.scope)) finding.scope = plainText.toPlainText(req.body.scope); // affected assets: plain text
         if (req.body.status !== undefined) finding.status = req.body.status;
         if (req.body.category) finding.category = req.body.category
         if (req.body.customFields) finding.customFields = req.body.customFields

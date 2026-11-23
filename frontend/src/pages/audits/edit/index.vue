@@ -48,7 +48,7 @@
             </div>
   
             <q-item
-            v-if="!currentAuditType || !currentAuditType.hidden.includes('network')"
+            v-if="audit.showNetwork && (!currentAuditType || !currentAuditType.hidden.includes('network'))"
             :to="'/audits/'+auditId+'/network'"
             >
               <q-item-section avatar>
@@ -59,6 +59,17 @@
   
             <div class="row">
               <div v-for="(user,idx) in networkUsers" :key="idx" class="col multi-colors-bar" :style="{background:user.color}" />
+            </div>
+
+            <q-item v-if="audit.showTestAccounts" :to="'/audits/'+auditId+'/accounts'">
+              <q-item-section avatar>
+                <q-icon name="fa fa-key"></q-icon>
+              </q-item-section>
+              <q-item-section>{{$t('testAccounts')}}</q-item-section>
+            </q-item>
+
+            <div class="row">
+              <div v-for="(user,idx) in accountsUsers" :key="idx" class="col multi-colors-bar" :style="{background:user.color}" />
             </div>
   
             <div v-if="!currentAuditType || !currentAuditType.hidden.includes('findings')">
@@ -344,6 +355,7 @@ export default defineComponent({
   computed: {
     generalUsers: function() {return this.users.filter(user => user.menu === 'general')},
     networkUsers: function() {return this.users.filter(user => user.menu === 'network')},
+    accountsUsers: function() {return this.users.filter(user => user.menu === 'accounts')},
     findingUsers: function() {return this.users.filter(user => user.menu === 'editFinding')},
     sectionUsers: function() {return this.users.filter(user => user.menu === 'editSection')},
 
@@ -406,6 +418,8 @@ export default defineComponent({
         return {menu: 'general', room: this.auditId}
       else if (this.$router.currentRoute.name && this.$router.currentRoute.name === 'network')
         return {menu: 'network', room: this.auditId}
+      else if (this.$router.currentRoute.name && this.$router.currentRoute.name === 'accounts')
+        return {menu: 'accounts', room: this.auditId}
       else if (this.$router.currentRoute.name && this.$router.currentRoute.name === 'addFindings')
         return {menu: 'addFindings', room: this.auditId}
       else if (this.$router.currentRoute.name && this.$router.currentRoute.name === 'editFinding' && this.$router.currentRoute.params.findingId)

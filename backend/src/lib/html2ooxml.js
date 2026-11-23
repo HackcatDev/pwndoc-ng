@@ -15,6 +15,13 @@
  *              (report-styles.resolve()). Without it the converter relies on
  *              the template styles only (Code, CodeChar, ListParagraph,
  *              PwndocLink...) - this is the historical behaviour.
+ *              { allocateList(start) } - returns the numId of a new ordered
+ *              list starting at `start` (preferred over listIds)
+ *
+ * Ordered lists: a list that does not start at 1 (<ol start="4">, "4." in
+ * Markdown) continues the previous list of the field when it starts right
+ * after its last item, e.g. steps interrupted by a code block; any other
+ * list gets its own numbering, starting at 1 or at its start number.
  */
 
 const htmlparser = require("htmlparser2");
@@ -207,6 +214,8 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
   const marks = [];           // stack of run property overlays from inline tags
   const lists = [];           // stack of {type, numId}
   const availableListIds = Array.isArray(listIds) ? listIds.slice() : [];
+  const allocateList = options && typeof options.allocateList === "function" ? options.allocateList : null;
+  let lastOrdered = null;     // last top level ordered list: {numId, next}
   let inPre = false;
   let inCodeInline = 0;
   let link = null;            // {href}
@@ -563,13 +572,23 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
             if (para) closeParagraph();
             let numId;
             const parentNumbered = lists.length && lists[lists.length - 1].type === "number" ? lists[lists.length - 1].numId : null;
+            const topLevel = lists.length === 0;
+            const parsedStart = parseInt(attribs.start, 10);
+            const start = isFinite(parsedStart) && parsedStart >= 0 ? parsedStart : 1;
+            let first = start;
             if (parentNumbered) numId = parentNumbered;
+            else if (topLevel && start !== 1 && lastOrdered && start === lastOrdered.next) {
+              numId = lastOrdered.numId; // continues the previous list
+              first = lastOrdered.next;
+            }
+            else if (allocateList) numId = parseInt(allocateList(start), 10) || NUMBERED_NUM_ID;
             else if (availableListIds.length) numId = parseInt(availableListIds.shift(), 10) || NUMBERED_NUM_ID;
             else numId = NUMBERED_NUM_ID;
-            lists.push({ type: "number", numId });
+            lists.push({ type: "number", numId, topLevel, first, count: 0 });
             break;
           }
           case "li":
+            if (lists.length) lists[lists.length - 1].count = (lists[lists.length - 1].count || 0) + 1;
             openListItemParagraph();
             break;
           case "table":
@@ -685,11 +704,13 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
             discardEmptyListParagraph();
             if (para) closeParagraph();
             break;
-          case "ul": case "ol":
+          case "ul": case "ol": {
             discardEmptyListParagraph();
             if (para) closeParagraph();
-            lists.pop();
+            const list = lists.pop();
+            if (list && list.type === "number" && list.topLevel) lastOrdered = { numId: list.numId, next: list.first + list.count };
             break;
+          }
           case "colgroup":
             if (currentTable()) currentTable().inColgroup = false;
             break;

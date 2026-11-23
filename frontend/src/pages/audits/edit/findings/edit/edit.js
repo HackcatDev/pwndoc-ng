@@ -257,7 +257,9 @@ export default {
               this.finding[field] = this.finding[field] || '';
             });
             this.finding.references = this.finding.references || [];
-      
+            // Affected assets are plain text; findings written before hold editor HTML
+            this.finding.scope = Utils.htmlToPlainText(this.finding.scope);
+
             // Initialize custom fields (even if they were empty)
             this.initCustomFieldsForFinding();
       

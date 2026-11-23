@@ -65,7 +65,7 @@ than silently ignored, so a typo cannot quietly drop content.
 | `description` | Markdown | |
 | `observation` | Markdown | |
 | `poc` | Markdown | proof of concept |
-| `affected_assets` | Markdown | the finding's *Affected scope* |
+| `affected_assets` | plain text | the finding's *Affected assets*, one per line, kept as sent (no Markdown, no link); an array is joined with line breaks |
 | `remediation` | Markdown | |
 | `references` | array of strings, or Markdown list | one entry per line, list markers are removed |
 | `vuln_type` | string | must match a vulnerability type of the deployment to be translated in the report |
@@ -123,7 +123,7 @@ curl -k -X POST https://pwndoc.example.com/api/v1/findings \
     "title": "SQL injection in the user search",
     "cvss_string": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
     "description": "The `id` parameter of `/api/users` is concatenated into the query.\n\n```http\nGET /api/users?id=1 OR 1=1 HTTP/1.1\n```",
-    "affected_assets": "- https://a.example.com/api/users",
+    "affected_assets": "https://a.example.com/api/users",
     "references": "- https://cwe.mitre.org/data/definitions/89.html",
     "business_impact": "Full read access to the **customer** database."
   }'

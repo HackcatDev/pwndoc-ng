@@ -194,16 +194,16 @@
               <q-card-section>{{ $t('affectedAssets') }}</q-card-section>
               <q-separator />
               <q-card-section>
-                <q-field borderless>
-                  <template #control>
-                    <basic-editor
-                      v-model="finding.scope"
-                      idUnique="basiceditor_scope"
-                      v-on:editorchange="readyToSave ? needSave = true : null"
-                      :editable="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
-                    />
-                  </template>
-                </q-field>
+                <!-- plain text: no formatting, no links, one asset per line -->
+                <q-input
+                  v-model="finding.scope"
+                  type="textarea"
+                  autogrow
+                  outlined
+                  input-style="min-height: 60px; font-family: monospace"
+                  :hint="$t('affectedAssetsHint')"
+                  :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                />
               </q-card-section>
             </q-card>
   

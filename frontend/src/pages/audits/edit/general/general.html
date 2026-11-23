@@ -203,6 +203,25 @@
             </q-card-section>
 
             <q-card-section>
+                <div class="text-subtitle2">{{$t('optionalSections')}}</div>
+                <div class="text-caption text-grey-7 q-mb-sm">{{$t('optionalSectionsInfo')}}</div>
+                <div class="row q-gutter-md">
+                    <q-toggle
+                    v-model="audit.showNetwork"
+                    :label="$t('showNetwork')"
+                    color="secondary"
+                    :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                    />
+                    <q-toggle
+                    v-model="audit.showTestAccounts"
+                    :label="$t('showTestAccounts')"
+                    color="secondary"
+                    :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                    />
+                </div>
+            </q-card-section>
+
+            <q-card-section>
                 <div class="text-subtitle2">{{$t('apiKey')}}</div>
                 <div class="text-caption text-grey-7 q-mb-sm">{{$t('apiKeyInfo')}}</div>
                 <div class="row q-col-gutter-sm items-center">

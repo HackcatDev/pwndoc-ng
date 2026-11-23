@@ -45,6 +45,14 @@ export default {
     return  api.get(`audits/${auditId}/network`)
   },
 
+  getAuditAccounts: function(auditId) {
+    return api.get(`audits/${auditId}/accounts`)
+  },
+
+  updateAuditAccounts: function(auditId, testAccounts) {
+    return api.put(`audits/${auditId}/accounts`, {testAccounts: testAccounts})
+  },
+
   updateAuditNetwork: function(auditId, audit) {
     return  api.put(`audits/${auditId}/network`, audit)
   },

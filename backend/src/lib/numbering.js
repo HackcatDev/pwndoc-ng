@@ -115,12 +115,13 @@ function prepare(zip) {
     return ctx
 }
 
-// Allocates a numId for an ordered list restarting at 1
-function allocateOrderedList(zip, ctx) {
+// Allocates a numId for an ordered list starting at `start` (1 by default)
+function allocateOrderedList(zip, ctx, start) {
     const numId = ctx.nextNumId++
+    const first = Number.isInteger(start) && start >= 0 ? start : 1
     let xml = zip.files[NUMBERING_PATH].asText()
     xml = insertNum(xml, `<w:num w:numId="${numId}"><w:abstractNumId w:val="${ctx.decimalAbstractId}"/>` +
-        `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>`)
+        `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="${first}"/></w:lvlOverride></w:num>`)
     zip.file(NUMBERING_PATH, xml)
     return numId
 }
