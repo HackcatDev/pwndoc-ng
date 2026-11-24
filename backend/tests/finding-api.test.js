@@ -160,6 +160,8 @@ module.exports = function () {
         remediation: "Use `parameters`.",
         references: ["https://owasp.org"],
         custom_fields: {business_impact: "Full access.", access_level: null},
+        low_quality: false,
+        quality_advice: null,
       })
     })
 

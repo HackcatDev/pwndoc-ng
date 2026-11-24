@@ -7,6 +7,7 @@ module.exports = function(app, io) {
     var _ = require('lodash');
     var utils = require('../lib/utils');
     var plainText = require('../lib/plain-text');
+    var aiAdvisor = require('../lib/ai-advisor');
     var Settings = require('mongoose').model('Settings');
 
     /* ### AUDITS LIST ### */
@@ -226,6 +227,11 @@ module.exports = function(app, io) {
         if (req.body.customFields) update.customFields = req.body.customFields;
         if (typeof req.body.aiEnabled === 'boolean') update.aiEnabled = req.body.aiEnabled;
         if (typeof req.body.showNetwork === 'boolean') update.showNetwork = req.body.showNetwork;
+        if (typeof req.body.aiAdvisorEnabled === 'boolean') update.aiAdvisorEnabled = req.body.aiAdvisorEnabled;
+        if (typeof req.body.aiImagesAdvisor === 'boolean') update.aiImagesAdvisor = req.body.aiImagesAdvisor;
+        if (typeof req.body.aiImagesObservation === 'boolean') update.aiImagesObservation = req.body.aiImagesObservation;
+        if (typeof req.body.aiAdvisorLanguage === 'string') update.aiAdvisorLanguage = req.body.aiAdvisorLanguage.trim().substring(0, 64);
+        if (typeof req.body.aiContext === 'string') update.aiContext = req.body.aiContext.substring(0, 20000);
         if (typeof req.body.showTestAccounts === 'boolean') update.showTestAccounts = req.body.showTestAccounts;
         if (req.body.aiPrompts !== undefined) {
             var promptErrors = []
@@ -422,6 +428,16 @@ module.exports = function(app, io) {
         if (req.body.status !== undefined) finding.status = req.body.status;
         if (req.body.category) finding.category = req.body.category
         if (req.body.customFields) finding.customFields = req.body.customFields
+        if (typeof req.body.aiHints === 'string') finding.aiHints = req.body.aiHints.substring(0, 10000)
+
+        // Low-quality flag set by the user (the quality advisor sets it on its own)
+        var stored = audit.findings.id(req.params.findingId)
+        var lowered = false
+        if (typeof req.body.lowQuality === 'boolean' && stored && req.body.lowQuality !== !!stored.lowQuality) {
+            finding.lowQuality = req.body.lowQuality
+            finding.lowQualitySource = req.body.lowQuality ? 'user' : null
+            lowered = !req.body.lowQuality
+        }
 
         if (settings.reviews.enabled && settings.reviews.private.removeApprovalsUponUpdate) {
             Audit.updateGeneral(acl.isAllowed(req.decodedToken.role, 'audits:update-all'), req.params.auditId, req.decodedToken.id, { approvals: [] });
@@ -431,6 +447,20 @@ module.exports = function(app, io) {
         .then(msg => {
             io.to(req.params.auditId).emit('updateAudit');            
             Response.Ok(res, msg)
+            // Quality advisor of the audit, in the background, when the content changed
+            // (skipAiReview: the editor runs it right after, from its button)
+            if (audit.aiEnabled && audit.aiAdvisorEnabled && (req.body.skipAiReview !== true || lowered)) {
+                aiAdvisor.runInBackground({
+                    auditId: req.params.auditId,
+                    findingId: req.params.findingId,
+                    isAdmin: acl.isAllowed(req.decodedToken.role, 'audits:update-all'),
+                    userId: req.decodedToken.id,
+                    io: io,
+                    lowered: lowered,
+                    // the flag lowered by the user is recorded even when the analysis is skipped
+                    recordOnly: req.body.skipAiReview === true
+                })
+            }
         })
         .catch(err => Response.Internal(res, err))
     });

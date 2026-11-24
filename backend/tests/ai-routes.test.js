@@ -40,7 +40,10 @@ module.exports = function () {
           if (auditId !== AUDIT_ID) throw {fn: 'NotFound', message: 'Audit not found or Insufficient Privileges'}
           return db.audit
         },
+        updateOne: async (query, update) => { db.auditUpdates.push(update.$set); return {} },
+        findOne: (query) => ({lean: async () => ({findings: db.audit.findings.filter(f => String(f._id) === String(query['findings._id']))})}),
       },
+      Image: {getOne: async (id) => (db.images[id] ? {value: db.images[id]} : null)},
       CustomField: {getAll: async () => [{_id: "c1", label: "Business_Impact", fieldType: "text", display: "finding"}]},
       Language: {getAll: async () => [{language: "English", locale: "en"}]},
       Settings: {getAll: async () => db.settings},
@@ -69,6 +72,8 @@ module.exports = function () {
       updates: [],
       settings: {reviews: {enabled: false}},
       fetches: [],
+      auditUpdates: [],
+      images: {},
       answer: {status: 200, body: {choices: [{message: {content: "New **text**"}}]}},
       audit: {
         _id: AUDIT_ID, name: "Audit", language: "en", state: "EDIT", aiEnabled: true, aiPrompts: {},
@@ -92,7 +97,7 @@ module.exports = function () {
       db.config.prompts = {description: "Describe {title}: {current_value}"}
       var response = await request(app).post(url).send({field: "description", finding: {title: "Unsaved title", description: "<p>draft</p>", apiKey: "ignored"}})
       expect(response.status).toBe(200)
-      expect(response.body.datas).toEqual({field: "description", kind: "html", value: "<p>New <strong>text</strong></p>", model: "m"})
+      expect(response.body.datas).toEqual({field: "description", kind: "html", value: "<p>New <strong>text</strong></p>", model: "m", images: 0})
       expect(db.fetches[0].url).toBe("https://llm.test/v1/chat/completions")
       expect(db.fetches[0].body.messages[0].content).toBe("Describe Unsaved title: draft")
     })
@@ -139,6 +144,86 @@ module.exports = function () {
       var response = await request(app).post(url).send({field: "title"})
       expect(response.status).toBe(502)
       expect(response.body.datas).toBe("The API key was refused by the model provider: bad key")
+    })
+  })
+
+  describe('Quality advisor endpoint', () => {
+    var reviewUrl = `/api/audits/${AUDIT_ID}/findings/${FINDING_ID}/ai/review`
+    var { PNG } = require('pngjs')
+    var png = () => { var p = new PNG({width: 4, height: 4}); p.data.fill(200); return 'data:image/png;base64,' + PNG.sync.write(p).toString('base64') }
+
+    beforeEach(() => {
+      db.audit.aiAdvisorEnabled = true
+      db.answer.body = {choices: [{message: {content: "VERDICT: insufficient\n\n- Add the **Burp** request [here](http://evil.test)"}}]}
+    })
+
+    it('stores the advice with the finding and raises the low-quality flag', async () => {
+      var response = await request(app).post(reviewUrl)
+      expect(response.status).toBe(200)
+      expect(response.body.datas.verdict).toBe('insufficient')
+      expect(response.body.datas.html).toBe('<ul>\n<li><p>Add the <strong>Burp</strong> request here</p></li>\n</ul>')
+      var set = db.auditUpdates[db.auditUpdates.length - 1]
+      expect(set['findings.$.aiReview'].verdict).toBe('insufficient')
+      expect(set['findings.$.aiReview'].hash).toMatch(/^[0-9a-f]{64}$/)
+      expect(set['findings.$.lowQuality']).toBe(true)
+      expect(set['findings.$.lowQualitySource']).toBe('ai')
+      expect(db.fetches[0].body.messages[0].content).toContain('Answer in English')
+    })
+
+    it('sends the images only when the model reads them and the audit allows it', async () => {
+      db.images["660000000000000000000aaa"] = png()
+      db.audit.findings[0].observation = '<p>see</p><img src="660000000000000000000aaa" alt="Burp request"><img src="https://evil.test/x.png" alt="external">'
+      await request(app).post(reviewUrl)
+      expect(typeof db.fetches[0].body.messages[0].content).toBe('string')
+      expect(db.fetches[0].body.messages[0].content).toContain('NOT attached')
+
+      db.config.supportsImages = true
+      db.audit.aiImagesAdvisor = true
+      await request(app).post(reviewUrl)
+      var content = db.fetches[1].body.messages[0].content
+      expect(content.map(p => p.type)).toEqual(['text', 'text', 'image_url'])
+      expect(content[1].text).toBe('Image 1 (Observation): Burp request')
+      expect(content[2].image_url.url).toMatch(/^data:image\/png;base64,/)
+    })
+
+    it('needs the advisor enabled for the audit', async () => {
+      db.audit.aiAdvisorEnabled = false
+      var response = await request(app).post(reviewUrl)
+      expect(response.status).toBe(403)
+      expect(db.fetches.length).toBe(0)
+    })
+
+    it('keeps the flag a user lowered for the same content', async () => {
+      await request(app).post(reviewUrl)
+      var hash = db.auditUpdates[db.auditUpdates.length - 1]['findings.$.aiReview'].hash
+      db.auditUpdates = []
+      db.audit.findings[0].lowQualityDismissedHash = hash
+      await request(app).post(reviewUrl)
+      expect(db.auditUpdates[0]['findings.$.lowQuality']).toBeUndefined()
+    })
+
+    it('stores the error of the provider with the previous advice', async () => {
+      db.audit.findings[0].aiReview = {verdict: 'ok', html: '<p>fine</p>', hash: 'x'}
+      db.answer = {status: 500, body: {error: {message: 'boom'}}}
+      var response = await request(app).post(reviewUrl)
+      expect(response.status).toBe(502)
+      var stored = db.auditUpdates[db.auditUpdates.length - 1]['findings.$.aiReview']
+      expect(stored.html).toBe('<p>fine</p>')
+      expect(stored.error).toContain('boom')
+    })
+  })
+
+  describe('Observation with images', () => {
+    it('attaches the images only for the Observation and when the audit allows it', async () => {
+      db.images["660000000000000000000aaa"] = 'data:image/png;base64,' + (() => { var { PNG } = require('pngjs'); var p = new PNG({width: 2, height: 2}); return PNG.sync.write(p).toString('base64') })()
+      db.config.supportsImages = true
+      db.audit.aiImagesObservation = true
+      var finding = {observation: '<p>x</p><img src="660000000000000000000aaa" alt="shot">'}
+      await request(app).post(url).send({field: "description", finding})
+      expect(typeof db.fetches[0].body.messages[0].content).toBe('string')
+      var response = await request(app).post(url).send({field: "observation", finding})
+      expect(response.body.datas.images).toBe(1)
+      expect(db.fetches[1].body.messages[0].content[2].type).toBe('image_url')
     })
   })
 

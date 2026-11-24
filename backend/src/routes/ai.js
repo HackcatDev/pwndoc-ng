@@ -6,20 +6,24 @@
  *   PUT  /api/ai/config                                  update it
  *   POST /api/ai/test                                    send a short prompt with the given (unsaved) configuration
  *   POST /api/audits/:auditId/findings/:findingId/ai     write a field of a finding
+ *   POST /api/audits/:auditId/findings/:findingId/ai/review   run the quality advisor on the saved finding
  */
 
-module.exports = function(app) {
+module.exports = function(app, io) {
 
     var Response = require('../lib/httpResponse')
     var acl = require('../lib/auth').acl
     var mongoose = require('mongoose')
     var ai = require('../lib/ai')
+    var aiAdvisor = require('../lib/ai-advisor')
 
     var AiConfig = mongoose.model('AiConfig')
     var Audit = mongoose.model('Audit')
     var CustomField = mongoose.model('CustomField')
     var Language = mongoose.model('Language')
     var Settings = mongoose.model('Settings')
+    var Image = mongoose.model('Image')
+    var models = {AiConfig: AiConfig, Audit: Audit, CustomField: CustomField, Language: Language, Image: Image}
 
     function fail(res, err) {
         if (err instanceof ai.AiError) Response.Custom(res, 'error', err.status, err.message)
@@ -30,13 +34,16 @@ module.exports = function(app) {
     async function promptsInfo(config) {
         var customFields = await CustomField.getAll()
         var fields = ai.availableFields(customFields)
+        // prompts of the editors: the fields, then the quality advisor
+        var promptFields = fields.concat([{key: ai.ADVISOR_KEY, label: 'Quality advisor', kind: 'advisor'}])
         var defaults = {}
-        fields.forEach(f => { defaults[f.key] = ai.defaultPrompt(f.key) })
+        promptFields.forEach(f => { defaults[f.key] = ai.defaultPrompt(f.key) })
         var placeholders = ai.PLACEHOLDERS.concat(
             fields.filter(f => !ai.BUILTIN_FIELDS[f.key]).map(f => ({name: f.key, description: `Custom field "${f.label}"`}))
         )
         return {
             fields: fields,
+            promptFields: promptFields,
             defaultPrompts: defaults,
             prompts: (config && config.prompts) || {},
             placeholders: placeholders,
@@ -52,6 +59,8 @@ module.exports = function(app) {
             info.configured = AiConfig.isConfigured(config)
             info.provider = config.provider
             info.model = config.model
+            info.supportsImages = !!config.supportsImages
+            info.advisorLanguage = config.advisorLanguage || ai.DEFAULT_ADVICE_LANGUAGE
             Response.Ok(res, info)
         } catch (err) { fail(res, err) }
     })
@@ -157,15 +166,56 @@ module.exports = function(app) {
                 return
             }
 
+            var finding = mergeFinding(stored, req.body.finding)
+            // the images of the finding go with the Observation when the audit allows it
+            var images = []
+            if (field === 'observation' && config.supportsImages && audit.aiImagesObservation)
+                images = (await aiAdvisor.findingImages(finding, models)).images
+
             var result = await ai.generate({
                 config: config,
                 audit: audit,
-                finding: mergeFinding(stored, req.body.finding),
+                finding: finding,
                 fieldKey: field,
                 languages: await Language.getAll(),
                 customFields: await CustomField.getAll(),
+                images: images,
             })
+            result.images = images.length
             Response.Ok(res, result)
+        } catch (err) { fail(res, err) }
+    })
+
+    // Quality advisor on the saved finding, run even when it did not change
+    app.post("/api/audits/:auditId/findings/:findingId/ai/review", acl.hasPermission('ai:generate'), async function(req, res) {
+        // #swagger.tags = ['AI']
+        try {
+            var role = req.decodedToken.role
+            if (!acl.isAllowed(role, 'audits:update')) {
+                Response.Forbidden(res, 'Insufficient privileges to edit this audit')
+                return
+            }
+            var isAdmin = acl.isAllowed(role, 'audits:update-all')
+            var audit = await Audit.getAiContext(isAdmin, req.params.auditId, req.decodedToken.id)
+            var settings = await Settings.getAll()
+            if (settings && settings.reviews && settings.reviews.enabled && audit.state !== 'EDIT') {
+                Response.Forbidden(res, 'The audit is not in the EDIT state and therefore cannot be edited.')
+                return
+            }
+            var review = await aiAdvisor.runReview({
+                auditId: req.params.auditId,
+                findingId: req.params.findingId,
+                isAdmin: isAdmin,
+                userId: req.decodedToken.id,
+                force: true,
+                io: io,
+                models: models,
+            })
+            if (!review) {
+                Response.Custom(res, 'error', 409, 'A newer analysis of this finding is running')
+                return
+            }
+            Response.Ok(res, review)
         } catch (err) { fail(res, err) }
     })
 }

@@ -30,7 +30,18 @@ var Finding = {
     scope:                  String,
     status:                 {type: Number, enum: [0,1], default: 1}, // 0: done, 1: redacting
     category:               String,
-    customFields:           [customField]
+    customFields:           [customField],
+    // Quality: flag shown in the list of findings, raised by a user or by the
+    // quality advisor (lowQualitySource), which does not raise it again for the
+    // content a user lowered it for (lowQualityDismissedHash)
+    lowQuality:             {type: Boolean, default: false},
+    lowQualitySource:       String, // 'user' | 'ai'
+    lowQualityDismissedHash: String,
+    // Notes for the AI about this finding (never in the report)
+    aiHints:                String,
+    // Last answer of the quality advisor: {verdict, markdown, html, model, hash,
+    // date, images, error, errorDate}
+    aiReview:               Schema.Types.Mixed
 }
 
 var Service = {
@@ -95,6 +106,14 @@ var AuditSchema = new Schema({
     // with prompts overriding the global ones by field key
     aiEnabled:          {type: Boolean, default: false},
     aiPrompts:          {type: Schema.Types.Mixed, default: {}},
+    // Quality advisor of the findings (needs aiEnabled), its language (empty:
+    // the global one), images sent to the model, context of the project for
+    // every AI request (never in the report)
+    aiAdvisorEnabled:   {type: Boolean, default: false},
+    aiAdvisorLanguage:  {type: String, default: ''},
+    aiImagesAdvisor:    {type: Boolean, default: false},
+    aiImagesObservation: {type: Boolean, default: false},
+    aiContext:          {type: String, default: ''},
     // Optional sections of the audit, switched in General Information. showNetwork
     // has no default: audits saved before the switch show the Network Scan when
     // they hold scanned hosts (lib/utils.networkEnabled), new audits hide it.
@@ -339,7 +358,7 @@ AuditSchema.statics.getGeneral = (isAdmin, auditId, userId) => {
         query.populate('collaborators', 'username firstname lastname')
         query.populate('reviewers', 'username firstname lastname')
         query.populate('company')
-        query.select('name auditType date date_start date_end client collaborators language scope template customFields aiEnabled aiPrompts showNetwork showTestAccounts')
+        query.select('name auditType date date_start date_end client collaborators language scope template customFields aiEnabled aiPrompts aiAdvisorEnabled aiAdvisorLanguage aiImagesAdvisor aiImagesObservation aiContext showNetwork showTestAccounts')
         query.lean().exec()
         .then((row) => {
             if (!row)
@@ -938,6 +957,11 @@ AuditSchema.statics.clone = (auditId, newName, userId) => {
                 sortFindings: sourceAudit.sortFindings,
                 aiEnabled: sourceAudit.aiEnabled,
                 aiPrompts: sourceAudit.aiPrompts,
+                aiAdvisorEnabled: sourceAudit.aiAdvisorEnabled,
+                aiAdvisorLanguage: sourceAudit.aiAdvisorLanguage,
+                aiImagesAdvisor: sourceAudit.aiImagesAdvisor,
+                aiImagesObservation: sourceAudit.aiImagesObservation,
+                aiContext: sourceAudit.aiContext,
                 showNetwork: require('../lib/utils').networkEnabled(sourceAudit),
                 showTestAccounts: sourceAudit.showTestAccounts !== false,
                 testAccounts: sourceAudit.testAccounts,
@@ -965,7 +989,7 @@ AuditSchema.statics.getAiContext = (isAdmin, auditId, userId) => {
         query.populate('company', 'name')
         query.populate('client', 'firstname lastname email')
         query.populate('findings.customFields.customField', 'label fieldType')
-        query.select('name auditType language date_start date_end scope.name state aiEnabled aiPrompts findings')
+        query.select('name auditType language date_start date_end scope.name state aiEnabled aiPrompts aiAdvisorEnabled aiAdvisorLanguage aiImagesAdvisor aiImagesObservation aiContext findings')
         query.lean().exec()
         .then((row) => {
             if (!row)

@@ -22,5 +22,10 @@ export default {
   // Write one field of a finding from the values the editor holds
   generate: function(auditId, findingId, field, finding) {
     return api.post(`audits/${auditId}/findings/${findingId}/ai`, {field: field, finding: finding})
+  },
+
+  // Quality advisor on the saved finding (stored with it)
+  review: function(auditId, findingId) {
+    return api.post(`audits/${auditId}/findings/${findingId}/ai/review`)
   }
 }

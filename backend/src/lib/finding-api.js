@@ -255,6 +255,14 @@ function serialize(finding, availableCustomFields) {
         remediation: markdown.toMarkdown(plain.remediation),
         references: plain.references || [],
         custom_fields: {},
+        // read only: the low-quality flag and the last answer of the quality advisor
+        low_quality: !!plain.lowQuality,
+        quality_advice: plain.aiReview && plain.aiReview.markdown !== undefined ? {
+            verdict: plain.aiReview.verdict || 'unknown',
+            advice: plain.aiReview.markdown || '',
+            model: plain.aiReview.model || null,
+            date: plain.aiReview.date || null,
+        } : null,
     }
 
     const known = findingCustomFields(availableCustomFields)

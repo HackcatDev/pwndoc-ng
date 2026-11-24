@@ -78,7 +78,15 @@
                 <q-item-section avatar>
                   <q-icon name="fa fa-list"></q-icon>
                 </q-item-section>
-                <q-item-section>{{$t('findings')}} ({{audit.findings.length || 0}})</q-item-section>
+                <q-item-section>
+                  <div class="row items-center no-wrap">
+                    {{$t('findings')}} ({{audit.findings.length || 0}})
+                    <span v-if="lowQualityCount" class="q-ml-sm text-amber-9 text-caption text-weight-bold">
+                      <q-icon name="warning" color="amber-8" size="xs" /> {{lowQualityCount}}
+                      <q-tooltip :delay="300">{{$t('ai.lowQualityCount', [lowQualityCount])}}</q-tooltip>
+                    </span>
+                  </div>
+                </q-item-section>
                 <q-item-section avatar>
                   <q-btn
                   @click="$router.push('/audits/'+auditId+'/findings/add').catch(err=>{})"
@@ -198,6 +206,11 @@
                         </q-item-section>
                         <q-item-section>
                           <span>{{ finding.title }}</span>
+                        </q-item-section>
+                        <q-item-section side v-if="finding.lowQuality">
+                          <q-icon name="warning" color="amber-8">
+                            <q-tooltip :delay="300">{{ $t('ai.lowQuality') }}</q-tooltip>
+                          </q-icon>
                         </q-item-section>
                         <q-item-section side v-if="finding.status === 0">
                           <q-icon name="check" color="green" />
@@ -359,6 +372,9 @@ export default defineComponent({
     findingUsers: function() {return this.users.filter(user => user.menu === 'editFinding')},
     sectionUsers: function() {return this.users.filter(user => user.menu === 'editSection')},
 
+    lowQualityCount: function() {
+      return Array.isArray(this.audit.findings) ? this.audit.findings.filter(f => f.lowQuality).length : 0
+    },
     currentAuditType: function() {
       return this.auditTypes.find(e => e.name === this.audit.auditType)
     }
@@ -579,6 +595,17 @@ export default defineComponent({
     },
 
     generateReport: function() {
+      // low-quality findings go into the report too: a reminder, nothing is blocked
+      if (this.lowQualityCount) {
+        Notify.create({
+          message: this.$t('ai.lowQualityReport', [this.lowQualityCount]),
+          color: 'warning',
+          textColor: 'black',
+          icon: 'warning',
+          position: 'top-right',
+          timeout: 8000
+        })
+      }
       const downloadNotif = Notify.create({
         spinner: QSpinnerGears,
         message: 'Generating the Report',

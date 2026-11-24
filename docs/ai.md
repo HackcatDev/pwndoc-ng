@@ -39,6 +39,21 @@ The API key lives in the `aiconfigs` collection: database backups hold it.
 
 Using the assistant requires the `ai:generate` permission (every built-in role has it through `user`) and the right to edit the audit. It is not available on an audit under review when reviews are enabled.
 
+## Quality advisor
+
+The advisor checks, early in the project, that the notes of a finding will be enough to write it later, when the target can no longer be tested again: exact endpoint and parameters, requests and responses, PoC, screenshots proving the exploitation, the reason why it is a vulnerability, the impact, consistency with the CVSS vector, overlap with the other findings of the audit.
+
+* Enabled per audit (*Enable quality advisor* in General Information, needs *Enable AI features*).
+* Runs in the background each time a finding is saved from the editor, only when what it reads changed since the last analysis (fingerprint of the fields, hints, context, images and prompt); *Check quality* next to *Save* saves the changes and runs it again. Never run by the findings API.
+* Its answer is stored with the finding and shown read-only under the finding (Markdown rendered by pwndoc and sanitized: no link, no image, no HTML of the model). The first line of the answer is the verdict: `ok`, `weak` or `insufficient`.
+* *Low quality* (toggle next to *Completed*): marked with a yellow triangle in the list of findings, counted next to *Findings*, reminded when generating the report and when marking the finding completed. The advisor raises it on `insufficient`, and lowers it on `ok` only when it raised it itself; once a user lowered it, the advisor does not raise it again for the same content.
+* Language of the advice: *Language of the advisor* (Data > AI integration, `English` by default), overridable per audit.
+* Context: the other findings of the same audit (severity, title, type, never their content), *Context for AI* of the audit and the *AI hints* of the finding (bottom of the finding editor). Both notes never go into the report and reach the model only through the `{project_context}` / `{finding_hints}` placeholders: the built-in prompts use them, a prompt without them does not send them (nothing is ever added to a prompt).
+
+### Images
+
+When *The model reads images* is set in Data > AI integration, an audit can send the images of the findings to the model, separately for the advisor (*Send images to AI for the quality advisor*) and for the generation of Observation (*Send images to AI when generating Observation*). At most 10 images, PNG / JPEG scaled down to 1600 px on their longest side, each sent after its caption; images from external URLs are never sent. Otherwise the model only sees `![caption](id)`. `{images_note}` tells the model whether they are attached (in the built-in prompts).
+
 ## Prompts and placeholders
 
 The prompt of a field is the first defined of: the audit override, the global prompt, the built-in prompt. `{name}` placeholders are replaced with the values the editor holds when the button is clicked (saved or not). Rich text is given as Markdown, images as `![alt](<image id>)`. An unknown placeholder is sent as is (the prompt editors flag it).
@@ -67,6 +82,12 @@ The prompt of a field is the first defined of: the audit override, the global pr
 | `{selected_field}` | Key of the field being written (`description`, `business_impact`...) |
 | `{selected_field_label}` | Label of the field being written |
 | `{current_value}` | Current content of the field being written |
+| `{project_context}` | Context for AI of the audit |
+| `{finding_hints}` | AI hints of the finding |
+| `{other_findings}` | The other findings of the audit: severity, score, title, type |
+| `{custom_fields}` | Every custom field of the finding, label and value |
+| `{advice_language}` | Language of the quality advisor |
+| `{images_note}` | Whether the images of the finding are attached |
 
 The answer is expected in Markdown for rich text fields, one reference per line for References and a single line for the Title. A code fence around the whole answer and `<think>` blocks are removed.
 
@@ -78,5 +99,9 @@ The answer is expected in Markdown for rich text fields, one reference per line 
 | `GET /api/ai/config`, `PUT /api/ai/config` | `ai:update` | global configuration (`apiKey` write only, `clearApiKey: true` removes it) |
 | `POST /api/ai/test` | `ai:update` | test a configuration |
 | `POST /api/audits/:auditId/findings/:findingId/ai` | `ai:generate` + `audits:update` | body `{field, finding}` (finding: the editor values), answer `{field, kind, value, model}`, where `value` is editor HTML, an array of lines or a string |
+
+| `POST /api/audits/:auditId/findings/:findingId/ai/review` | `ai:generate` + `audits:update` | runs the quality advisor on the saved finding, answer `{verdict, markdown, html, model, hash, date, images, flags}` |
+
+The prompt of the advisor has the key `advisor` in the prompts (global and audit overrides).
 
 Errors of the model provider are answered `502` (`504` on timeout) with a readable message.

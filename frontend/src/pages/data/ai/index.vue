@@ -70,6 +70,19 @@
                 <q-input class="col-md-4 col-12" outlined stack-label type="number" min="0" max="2" step="0.1" :label="$t('ai.temperature')" v-model="config.temperature" :hint="$t('ai.emptyDefault')" clearable />
                 <q-input class="col-md-4 col-12" outlined stack-label type="number" min="1" :label="$t('ai.maxTokens')" v-model="config.maxTokens" :hint="config.provider === 'anthropic' ? $t('ai.maxTokensHintAnthropic') : $t('ai.emptyDefault')" clearable />
                 <q-input class="col-md-4 col-12" outlined stack-label type="number" min="5" max="3600" :label="$t('ai.timeout')" v-model="config.timeout" />
+                <div class="col-md-6 col-12">
+                    <q-toggle v-model="config.supportsImages" color="secondary" :label="$t('ai.supportsImages')" />
+                    <div class="text-caption text-grey-7 q-pl-sm">{{$t('ai.supportsImagesInfo')}}</div>
+                </div>
+                <q-input
+                    class="col-md-6 col-12"
+                    outlined
+                    stack-label
+                    :label="$t('ai.advisorLanguage')"
+                    v-model="config.advisorLanguage"
+                    placeholder="English"
+                    :hint="$t('ai.advisorLanguageHint')"
+                />
                 <q-input
                     class="col-12"
                     outlined
@@ -112,7 +125,7 @@
                 <div class="text-grey-8 q-mb-sm">{{$t('ai.promptsInfo')}}</div>
                 <ai-prompts
                     v-model="config.prompts"
-                    :fields="fields"
+                    :fields="promptFields"
                     :base-prompts="defaultPrompts"
                     :placeholders="placeholders"
                     :custom-placeholder-help="customPlaceholderHelp"
@@ -151,6 +164,7 @@ export default {
             apiKeyVisible: false,
             clearApiKey: false,
             fields: [],
+            promptFields: [],
             defaultPrompts: {},
             placeholders: [],
             customPlaceholderHelp: '',
@@ -195,6 +209,7 @@ export default {
         load: function(datas) {
             this.config = Object.assign({}, datas.config, {prompts: Object.assign({}, datas.config.prompts || {})})
             this.fields = datas.fields || []
+            this.promptFields = datas.promptFields || this.fields
             this.defaultPrompts = datas.defaultPrompts || {}
             this.placeholders = datas.placeholders || []
             this.customPlaceholderHelp = datas.customPlaceholderHelp || ''
@@ -222,7 +237,9 @@ export default {
                 timeout: this.config.timeout,
                 systemPrompt: this.config.systemPrompt,
                 extraBody: this.config.extraBody,
-                prompts: this.config.prompts
+                prompts: this.config.prompts,
+                supportsImages: !!this.config.supportsImages,
+                advisorLanguage: this.config.advisorLanguage || ''
             }
             if (this.clearApiKey) result.clearApiKey = true
             else if (this.apiKey) result.apiKey = this.apiKey

@@ -275,6 +275,48 @@
                         />
                     </div>
                 </div>
+                <div v-if="audit.aiEnabled" class="q-mt-sm">
+                    <div class="row items-center q-col-gutter-sm">
+                        <div class="col">
+                            <div class="text-subtitle2">{{$t('ai.advisor')}}</div>
+                            <div class="text-caption text-grey-7">{{$t('ai.advisorAuditInfo')}}</div>
+                        </div>
+                        <div class="col-auto">
+                            <q-toggle v-model="audit.aiAdvisorEnabled" :label="$t('ai.advisorEnable')" color="secondary" left-label :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT" />
+                        </div>
+                    </div>
+                    <div class="row q-col-gutter-sm q-mt-xs items-start">
+                        <q-input
+                        class="col-md-4 col-12"
+                        dense
+                        outlined
+                        stack-label
+                        :label="$t('ai.advisorLanguage')"
+                        v-model="audit.aiAdvisorLanguage"
+                        :placeholder="aiStatus.advisorLanguage || 'English'"
+                        :hint="$t('ai.advisorLanguageAuditHint')"
+                        :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                        />
+                        <div class="col-md-8 col-12">
+                            <q-toggle v-model="audit.aiImagesAdvisor" :label="$t('ai.imagesAdvisor')" color="secondary" dense :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || !aiStatus.supportsImages" />
+                            <br>
+                            <q-toggle v-model="audit.aiImagesObservation" :label="$t('ai.imagesObservation')" color="secondary" dense class="q-mt-xs" :disable="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT || !aiStatus.supportsImages" />
+                            <div class="text-caption text-grey-7">{{aiStatus.supportsImages ? $t('ai.imagesAuditInfo') : $t('ai.imagesNotSupported')}}</div>
+                        </div>
+                    </div>
+                    <q-input
+                    class="q-mt-sm"
+                    outlined
+                    dense
+                    stack-label
+                    type="textarea"
+                    autogrow
+                    :label="$t('ai.projectContext')"
+                    :hint="$t('ai.projectContextHint')"
+                    v-model="audit.aiContext"
+                    :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+                    />
+                </div>
                 <q-expansion-item
                 v-if="audit.aiEnabled"
                 class="q-mt-sm"
@@ -287,7 +329,7 @@
                     <div class="q-pt-sm">
                         <ai-prompts
                         v-model="audit.aiPrompts"
-                        :fields="aiStatus.fields"
+                        :fields="aiStatus.promptFields || aiStatus.fields"
                         :base-prompts="aiBasePrompts"
                         :placeholders="aiStatus.placeholders"
                         :custom-placeholder-help="aiStatus.customPlaceholderHelp"

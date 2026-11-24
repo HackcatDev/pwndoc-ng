@@ -19,8 +19,13 @@ var AiConfigSchema = new Schema({
     timeout:        {type: Number, min: 5, max: 3600, default: 120},
     systemPrompt:   {type: String, default: ''},
     extraBody:      {type: String, default: ''},
-    // Prompt of each field, by field key (title, description, ..., custom field slug)
+    // Prompt of each field, by field key (title, description, ..., custom field
+    // slug) and of the quality advisor (advisor)
     prompts:        {type: Schema.Types.Mixed, default: {}},
+    // The model reads images: the audits may send the images of the findings
+    supportsImages: {type: Boolean, default: false},
+    // Language of the answers of the quality advisor (audits can override it)
+    advisorLanguage: {type: String, default: 'English'},
 }, {timestamps: true, minimize: false})
 
 function keyHint(key) {
@@ -43,6 +48,8 @@ AiConfigSchema.statics.getPublicConfig = async () => {
         systemPrompt: row.systemPrompt || '',
         extraBody: row.extraBody || '',
         prompts: row.prompts || {},
+        supportsImages: !!row.supportsImages,
+        advisorLanguage: row.advisorLanguage === undefined ? 'English' : (row.advisorLanguage || ''),
         apiKeySet: !!row.apiKey,
         apiKeyHint: keyHint(row.apiKey),
     }

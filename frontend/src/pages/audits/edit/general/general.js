@@ -126,7 +126,7 @@ export default {
         aiBasePrompts: function() {
             var result = {}
             if (!this.aiStatus) return result
-            this.aiStatus.fields.forEach(f => {
+            ;(this.aiStatus.promptFields || this.aiStatus.fields).forEach(f => {
                 var prompt = (this.aiStatus.prompts || {})[f.key]
                 result[f.key] = (prompt && prompt.trim()) ? prompt : (this.aiStatus.defaultPrompts || {})[f.key]
             })
@@ -164,6 +164,11 @@ export default {
                 this.audit = data.data.datas;
                 this.audit.aiEnabled = !!this.audit.aiEnabled;
                 this.audit.aiPrompts = this.audit.aiPrompts || {};
+                this.audit.aiAdvisorEnabled = !!this.audit.aiAdvisorEnabled;
+                this.audit.aiImagesAdvisor = !!this.audit.aiImagesAdvisor;
+                this.audit.aiImagesObservation = !!this.audit.aiImagesObservation;
+                this.audit.aiAdvisorLanguage = this.audit.aiAdvisorLanguage || '';
+                this.audit.aiContext = this.audit.aiContext || '';
                 this.audit.showNetwork = !!this.audit.showNetwork;
                 this.audit.showTestAccounts = this.audit.showTestAccounts !== false;
                 this.auditOrig = this.$_.cloneDeep(this.audit);

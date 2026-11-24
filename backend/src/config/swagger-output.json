@@ -201,6 +201,21 @@
                 "showNetwork": {
                   "example": "any"
                 },
+                "aiAdvisorEnabled": {
+                  "example": "any"
+                },
+                "aiImagesAdvisor": {
+                  "example": "any"
+                },
+                "aiImagesObservation": {
+                  "example": "any"
+                },
+                "aiAdvisorLanguage": {
+                  "example": "any"
+                },
+                "aiContext": {
+                  "example": "any"
+                },
                 "showTestAccounts": {
                   "example": "any"
                 },
@@ -488,6 +503,15 @@
                   "example": "any"
                 },
                 "customFields": {
+                  "example": "any"
+                },
+                "aiHints": {
+                  "example": "any"
+                },
+                "lowQuality": {
+                  "example": "any"
+                },
+                "skipAiReview": {
                   "example": "any"
                 }
               }
@@ -854,6 +878,29 @@
                 }
               }
             }
+          }
+        ],
+        "responses": {}
+      }
+    },
+    "/api/audits/{auditId}/findings/{findingId}/ai/review": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "description": "",
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
           }
         ],
         "responses": {}

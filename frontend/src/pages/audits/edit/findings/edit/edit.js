@@ -54,6 +54,9 @@ export default {
       aiStatus: null,
       aiBusy: {},
       aiTitle: { show: false, current: '', proposed: '', model: '' },
+      // Quality advisor: analysis running for this finding, panel opened
+      aiReviewRunning: false,
+      advisorOpen: true,
     };
   },
 
@@ -84,10 +87,22 @@ export default {
     });
 
     document.addEventListener('keydown', this._listener, false);
+
+    // Quality advisor running in the backend after a save, or from another user
+    this._onReviewStarted = (data) => {
+      if (data && data.findingId === this.findingId) this.aiReviewRunning = true;
+    };
+    this._onReview = (data) => {
+      if (data && data.findingId === this.findingId) this.refreshReview();
+    };
+    this.$socket.on('aiReviewStarted', this._onReviewStarted);
+    this.$socket.on('aiReview', this._onReview);
   },
 
   beforeUnmount() {
     document.removeEventListener('keydown', this._listener, false);
+    this.$socket.off('aiReviewStarted', this._onReviewStarted);
+    this.$socket.off('aiReview', this._onReview);
   },
 
   beforeRouteLeave(to, from, next) {
@@ -121,6 +136,26 @@ export default {
       return !!(this.aiStatus && this.aiStatus.configured &&
         this.localAudit && this.localAudit.aiEnabled &&
         this.frontEndAuditState === this.AUDIT_VIEW_STATE.EDIT);
+    },
+    // The quality advisor runs for this audit
+    advisorEnabled() {
+      return !!(this.aiStatus && this.aiStatus.configured &&
+        this.localAudit && this.localAudit.aiEnabled && this.localAudit.aiAdvisorEnabled);
+    },
+    hasReview() {
+      return !!(this.finding.aiReview && (this.finding.aiReview.html || this.finding.aiReview.error || this.finding.aiReview.verdict));
+    },
+    verdictInfo() {
+      const verdict = this.finding.aiReview && this.finding.aiReview.verdict;
+      const colors = { ok: 'positive', weak: 'orange-8', insufficient: 'negative' };
+      return { color: colors[verdict] || 'grey-7', label: $t(`ai.verdict.${verdict in colors ? verdict : 'unknown'}`) };
+    },
+    reviewCaption() {
+      const review = this.finding.aiReview;
+      if (!review || !review.date) return this.advisorEnabled ? $t('ai.advisorCaption') : '';
+      const parts = [new Date(review.date).toLocaleString(), review.model];
+      if (review.images) parts.push($t('ai.imagesSent', [review.images]));
+      return parts.filter(Boolean).join(' · ');
     },
     aiCustomFields() {
       if (!this.aiAvailable) return [];
@@ -273,9 +308,11 @@ export default {
           });
       },
       
-    updateFinding() {
+    // Saves the finding; resolves true when saved. skipAiReview: the advisor
+    // is run by the caller (button), not in the background
+    updateFinding(options = {}) {
       Utils.syncEditors(this.$refs);
-      nextTick(() => {
+      return nextTick().then(() => {
         if (
           this.$refs.customfields &&
           this.$refs.customfields.requiredFieldsEmpty()
@@ -286,10 +323,11 @@ export default {
             textColor: 'white',
             position: 'top-right',
           });
-          return;
+          return false;
         }
 
-        AuditService.updateFinding(this.auditId, this.findingId, this.finding)
+        const payload = options.skipAiReview ? Object.assign({}, this.finding, { skipAiReview: true }) : this.finding;
+        return AuditService.updateFinding(this.auditId, this.findingId, payload)
           .then(() => {
             this.findingOrig = this.$_.cloneDeep(this.finding);
             Notify.create({
@@ -299,6 +337,7 @@ export default {
               position: 'top-right',
             });
             this.needSave = false;
+            return true;
           })
           .catch((err) => {
             Notify.create({
@@ -307,10 +346,70 @@ export default {
               textColor: 'white',
               position: 'top-right',
             });
+            return false;
           });
       }).catch((err) => {
         console.error('Error in updateFinding nextTick:', err);
+        return false;
       });
+    },
+
+    // *** Quality advisor ***
+
+    // Completed while flagged low-quality: a warning, nothing is blocked
+    onStatusChange(value) {
+      this.needSave = true;
+      if (value === 0 && this.finding.lowQuality) {
+        Notify.create({
+          message: $t('ai.completedLowQuality'),
+          color: 'warning',
+          textColor: 'black',
+          icon: 'warning',
+          position: 'top-right',
+        });
+      }
+    },
+
+    // Advice and flag of the saved finding, without touching what is being edited
+    refreshReview() {
+      return AuditService.getFinding(this.auditId, this.findingId)
+        .then((data) => {
+          const saved = data.data.datas || {};
+          ['aiReview', 'lowQuality', 'lowQualitySource'].forEach((key) => {
+            this.finding[key] = saved[key];
+            this.findingOrig[key] = this.$_.cloneDeep(saved[key]);
+          });
+          this.aiReviewRunning = false;
+        })
+        .catch(() => {
+          this.aiReviewRunning = false;
+        });
+    },
+
+    // Button: saves the changes first, then analyses the saved finding
+    async checkQuality() {
+      if (this.aiReviewRunning) return;
+      if (this.needSave) {
+        const saved = await this.updateFinding({ skipAiReview: true });
+        if (!saved) return;
+      }
+      this.aiReviewRunning = true;
+      this.advisorOpen = true;
+      AiService.review(this.auditId, this.findingId)
+        .then(() => this.refreshReview())
+        .catch((err) => {
+          const detail = (err.response && err.response.data && err.response.data.datas) || err.message || String(err);
+          Notify.create({
+            message: `${$t('ai.reviewFailed')}: ${detail}`,
+            color: 'negative',
+            textColor: 'white',
+            position: 'top-right',
+            timeout: 10000,
+            multiLine: true,
+            actions: [{ icon: 'close', color: 'white', round: true }],
+          });
+          this.refreshReview();
+        });
     },
 
     syncEditors() {

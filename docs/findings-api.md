@@ -74,6 +74,8 @@ than silently ignored, so a typo cannot quietly drop content.
 | `remediation_complexity` | 1 to 3 | easy, medium, complex |
 | `status` | `"redacting"` or `"done"` | |
 | `custom_fields` | object | custom fields by name, see below |
+| `low_quality` | boolean | read only: the *Low quality* flag of the finding |
+| `quality_advice` | object | read only: last answer of the quality advisor `{verdict, advice (Markdown), model, date}`, `null` when none; the API never runs the advisor |
 
 A finding's **custom fields** are addressed by the same name the docx template
 uses: the label lowercased, without spaces, with anything but a letter, a digit

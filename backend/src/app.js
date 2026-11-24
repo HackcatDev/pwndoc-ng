@@ -118,7 +118,7 @@ require('./routes/vulnerability')(app);
 require('./routes/data')(app);
 require('./routes/image')(app);
 require('./routes/settings')(app);
-require('./routes/ai')(app);
+require('./routes/ai')(app, io);
 
 const { cronJobs } = require('./lib/cron');
 cronJobs();

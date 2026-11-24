@@ -13,6 +13,7 @@
  */
 
 const _ = require('lodash')
+const crypto = require('crypto')
 const CVSS31 = require('./cvsscalc31')
 const markdown = require('./markdown')
 const plainText = require('./plain-text')
@@ -75,12 +76,83 @@ You're currently working on a single finding with the following fields:
 {remediation}
 </remediation>
 
+Notes of the auditors about the project (take them into account, do not question them):
+{project_context}
+
+Notes of the auditors about this finding (take them into account, do not question them):
+{finding_hints}
+
+{images_note}
+
 Your specific task for now is to rewrite the field {selected_field} or write it from scratch, if empty and understandable based on other finding fields. Strictly follow these guidelines:
 __GUIDELINES__
 
 Do not print out anything but the requested field value - no pretext, no helper text or comments, only what should come to the field "{selected_field}".`
 
+// Prompt of the quality advisor (key "advisor")
+const ADVISOR_PROMPT = `You are a senior penetration tester reviewing the working notes a colleague took for one finding during the pentest "{audit_name}" ({audit_type}) for {company_name}. The notes were written quickly while testing. The report will be written later, when the target can no longer be tested again: no new screenshot, request or proof can be collected then. Tell whether these notes are enough to write this finding later, and what must be collected NOW, while testing is still possible.
+
+Check in particular:
+- Reproducibility: the exact affected host, URL, endpoint or parameter, the steps, the HTTP request and response (e.g. from Burp), the payload or the PoC code, the account or role used.
+- Evidence: screenshots or captured output proving the issue AND its exploitation or impact, not only that a request was sent. {images_note}
+- The issue itself: what is wrong and why it is a vulnerability and not an intended behaviour.
+- Impact: what an attacker gains in this context, consistent with the CVSS vector and the severity.
+- Consistency: the title, the CVSS vector, the affected assets and the notes describe the same thing.
+- Overlap with the other findings of this audit listed below: when one looks like the same issue, suggest merging them or say what must be documented to tell them apart.
+
+Do not ask for anything the notes of the auditors below declare intended, out of scope or not needed. Do not rewrite the finding and do not comment on style, wording or grammar: only on the substance needed to write it later. Be concrete and short: a list of actionable points, the most important first. When nothing important is missing, say so in one sentence.
+
+Answer in {advice_language}. The first line of the answer must be exactly one of:
+VERDICT: ok
+VERDICT: weak
+VERDICT: insufficient
+(ok: enough to write the finding; weak: it can be written but useful material is missing; insufficient: the finding cannot be written or reproduced from these notes). Then the advice in Markdown: paragraphs, lists, bold and inline code only. No links, no images, no HTML, no buttons or forms, nothing to click.
+
+Notes of the auditors about the project:
+{project_context}
+
+Notes of the auditors about this finding:
+{finding_hints}
+
+Other findings of this audit (titles only):
+{other_findings}
+
+The finding:
+<title>{title}</title>
+<type>{vuln_type}</type>
+<category>{category}</category>
+<cvss>{cvss_string} (score {cvss_score}, {cvss_severity})</cvss>
+
+<affected_assets>
+{affected_assets}
+</affected_assets>
+
+<description>
+{description}
+</description>
+
+<observation>
+{observation}
+</observation>
+
+<proofs>
+{poc}
+</proofs>
+
+<remediation>
+{remediation}
+</remediation>
+
+<references>
+{references}
+</references>
+
+<custom_fields>
+{custom_fields}
+</custom_fields>`
+
 function defaultPrompt(fieldKey) {
+    if (fieldKey === 'advisor') return ADVISOR_PROMPT
     const guidelines = FIELD_GUIDELINES[fieldKey] || FIELD_GUIDELINES.custom
     return PROMPT_TEMPLATE.replace('__GUIDELINES__', guidelines)
 }
@@ -113,7 +185,17 @@ const PLACEHOLDERS = [
     { name: 'selected_field', description: 'Key of the field being written (e.g. description, business_impact)' },
     { name: 'selected_field_label', description: 'Label of the field being written (e.g. Description)' },
     { name: 'current_value', description: 'Current content of the field being written' },
+    { name: 'project_context', description: 'Context for AI of the audit (General Information)' },
+    { name: 'finding_hints', description: 'AI hints of the finding' },
+    { name: 'other_findings', description: 'The other findings of the audit: severity, title, type (titles only)' },
+    { name: 'custom_fields', description: 'Every custom field of the finding: label and value' },
+    { name: 'advice_language', description: 'Language of the quality advisor (audit setting, else the global one)' },
+    { name: 'images_note', description: 'Whether the images of the finding are attached to the request' },
 ]
+
+// Fields of the finding the quality advisor reads, as placeholders (see review)
+const ADVISOR_KEY = 'advisor'
+const DEFAULT_ADVICE_LANGUAGE = 'English'
 const CUSTOM_PLACEHOLDER_HELP = 'Each custom field of the findings, by its slug (label in lower case, spaces removed, other characters replaced by _), e.g. {business_impact}'
 
 const COMPLEXITY = { 1: 'Easy', 2: 'Medium', 3: 'Complex' }
@@ -160,6 +242,30 @@ function customFieldLabel(entry) {
     return definition && definition.label ? definition.label : null
 }
 
+// The other findings of the audit, one per line: severity, score, title, type
+function otherFindingsText(audit, finding) {
+    const lines = []
+    for (const other of (audit && audit.findings) || []) {
+        if (finding && finding._id && String(other._id) === String(finding._id)) continue
+        const cvss = other.cvssv3 ? CVSS31.calculateCVSSFromVector(other.cvssv3) : { success: false }
+        const severity = cvss.success ? `${cvss.baseSeverity} ${cvss.baseMetricScore}` : 'no CVSS'
+        const type = [other.vulnType, other.category].filter(Boolean).join(', ')
+        lines.push(`- [${severity}] ${other.title || '(no title)'}${type ? ` (${type})` : ''}`)
+    }
+    return lines.length ? lines.join('\n') : '(none)'
+}
+
+function customFieldsText(finding) {
+    const parts = []
+    for (const entry of (finding && finding.customFields) || []) {
+        const label = customFieldLabel(entry)
+        if (!label) continue
+        const value = customFieldText(entry)
+        if (value && String(value).trim()) parts.push(`${label}:\n${value}`)
+    }
+    return parts.join('\n\n')
+}
+
 function personName(person) {
     if (!person || typeof person !== 'object') return ''
     return [person.firstname, person.lastname].filter(Boolean).join(' ') || person.email || ''
@@ -174,7 +280,7 @@ function personName(person) {
  * customFields: CustomField documents (every custom field gets a value, empty
  * when the finding has none, so that its placeholder never stays unreplaced).
  */
-function buildValues({ audit = {}, finding = {}, fieldKey, languages = [], customFields = [] }) {
+function buildValues({ audit = {}, finding = {}, fieldKey, languages = [], customFields = [], adviceLanguage = '', imagesNote = '' }) {
     const language = (languages || []).find((l) => l.locale === audit.language)
     const cvss = finding.cvssv3 ? CVSS31.calculateCVSSFromVector(finding.cvssv3) : { success: false }
     const scope = (audit.scope || []).map((item) => (typeof item === 'string' ? item : item && item.name)).filter(Boolean)
@@ -203,6 +309,12 @@ function buildValues({ audit = {}, finding = {}, fieldKey, languages = [], custo
         cvss_string: finding.cvssv3 || '',
         cvss_score: cvss.success ? String(cvss.baseMetricScore) : '',
         cvss_severity: cvss.success ? cvss.baseSeverity : '',
+        project_context: (audit.aiContext || '').trim(),
+        finding_hints: (finding.aiHints || '').trim(),
+        other_findings: otherFindingsText(audit, finding),
+        custom_fields: customFieldsText(finding),
+        advice_language: adviceLanguage || (audit.aiAdvisorLanguage || '').trim() || DEFAULT_ADVICE_LANGUAGE,
+        images_note: imagesNote,
     }
 
     for (const field of customFields || []) {
@@ -230,6 +342,15 @@ function render(template, values) {
     return String(template || '').replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => {
         return Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match
     })
+}
+
+/*
+ * Prompt of a template for the values: exactly the template, nothing is added
+ * (a prompt without {project_context} / {finding_hints} / {images_note} does
+ * not get them).
+ */
+function renderPrompt(template, values) {
+    return render(template, values)
 }
 
 // Placeholders of a prompt that are not known (for the warnings of the editors)
@@ -294,8 +415,21 @@ function isNumber(value) {
     return value !== null && value !== undefined && value !== '' && !isNaN(Number(value))
 }
 
-// {url, headers, body} of the request for a prompt
-function buildRequest(config, prompt) {
+// Content of the user message: the prompt, then each image after its caption
+function userContent(provider, prompt, images) {
+    if (!images || !images.length) return prompt
+    const parts = [{ type: 'text', text: prompt }]
+    images.forEach((image, index) => {
+        const label = `Image ${index + 1}${image.field ? ` (${image.field})` : ''}${image.caption ? `: ${image.caption}` : ''}`
+        parts.push({ type: 'text', text: label })
+        if (provider === 'anthropic') parts.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } })
+        else parts.push({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } })
+    })
+    return parts
+}
+
+// {url, headers, body} of the request for a prompt (and its images)
+function buildRequest(config, prompt, images = []) {
     if (!config || !config.apiHost) throw new AiError('The AI integration is not configured (API host)', 500)
     if (!config.model) throw new AiError('The AI integration is not configured (model)', 500)
 
@@ -308,12 +442,12 @@ function buildRequest(config, prompt) {
         headers['anthropic-version'] = '2023-06-01'
         body.max_tokens = isNumber(config.maxTokens) ? Number(config.maxTokens) : 4096
         if (system) body.system = system
-        body.messages = [{ role: 'user', content: prompt }]
+        body.messages = [{ role: 'user', content: userContent('anthropic', prompt, images) }]
     } else {
         if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
         body.messages = []
         if (system) body.messages.push({ role: 'system', content: system })
-        body.messages.push({ role: 'user', content: prompt })
+        body.messages.push({ role: 'user', content: userContent('openai', prompt, images) })
         if (isNumber(config.maxTokens)) body.max_tokens = Number(config.maxTokens)
     }
     if (isNumber(config.temperature)) body.temperature = Number(config.temperature)
@@ -362,8 +496,8 @@ function extractText(provider, data) {
  * with a readable message (never the HTTP status of the provider as is: a 401
  * of the provider must not look like an expired pwndoc session).
  */
-async function complete(config, prompt, { fetchImpl = globalThis.fetch } = {}) {
-    const request = buildRequest(config, prompt)
+async function complete(config, prompt, { fetchImpl = globalThis.fetch, images = [] } = {}) {
+    const request = buildRequest(config, prompt, images)
     const timeout = (isNumber(config.timeout) ? Number(config.timeout) : 120) * 1000
 
     let response
@@ -435,18 +569,96 @@ function toFieldValue(kind, text) {
  * Whole generation: prompt selection, rendering, model call, conversion.
  * Returns {field, kind, value, model}.
  */
-async function generate({ config, audit, finding, fieldKey, languages, customFields, fetchImpl }) {
+async function generate({ config, audit, finding, fieldKey, languages, customFields, fetchImpl, images = [] }) {
     const field = availableFields(customFields).find((f) => f.key === fieldKey)
     if (!field) throw new AiError(`Unknown field: ${fieldKey}`, 422)
 
-    const values = buildValues({ audit, finding, fieldKey, languages, customFields })
+    const imagesNote = images.length ? `The ${images.length} image(s) of the finding are attached, in their order of appearance, each after its caption: use what they show.` : ''
+    const values = buildValues({ audit, finding, fieldKey, languages, customFields, imagesNote })
     const template = selectPrompt(fieldKey, audit && audit.aiPrompts, config && config.prompts)
-    const prompt = render(template, values)
-    const text = await complete(config, prompt, { fetchImpl })
+    const prompt = renderPrompt(template, values)
+    const text = await complete(config, prompt, { fetchImpl, images })
     const value = toFieldValue(field.kind, text)
     if ((Array.isArray(value) && value.length === 0) || (!Array.isArray(value) && !String(value).trim()))
         throw new AiError('The model returned an empty answer', 502)
     return { field: fieldKey, kind: field.kind, value: value, model: config.model }
+}
+
+/*
+ * *** Quality advisor ***
+ */
+
+const VERDICTS = ['ok', 'weak', 'insufficient']
+
+// HTML of the advice: sanitized Markdown, without images nor links (nothing
+// in the panel loads a resource or can be clicked)
+function adviceHtml(md) {
+    return markdown.toHtml(md)
+        .replace(/<img\b[^>]*>/gi, '')
+        .replace(/<a\b[^>]*>/gi, '')
+        .replace(/<\/a>/gi, '')
+}
+
+// {verdict, markdown, html} of an answer of the advisor
+function parseAdvice(text) {
+    let answer = cleanAnswer(text)
+    let verdict = 'unknown'
+    const m = /^[ \t>*_#-]*VERDICT[ \t*_]*:[ \t*_]*(ok|weak|insufficient)\b.*$/im.exec(answer)
+    if (m) {
+        verdict = m[1].toLowerCase()
+        answer = (answer.slice(0, m.index) + answer.slice(m.index + m[0].length)).trim()
+    }
+    return { verdict, markdown: answer, html: adviceHtml(answer) }
+}
+
+function imagesNoteFor(refs, images) {
+    if (images.length) return `The ${images.length} image(s) of the finding are attached to this message, in their order of appearance, each after its caption: check what they actually show.`
+    if (refs.length) return `The finding holds ${refs.length} image(s) that are NOT attached: ![caption](id) marks them in the fields, judge them from their captions only.`
+    return 'The finding holds no image.'
+}
+
+/*
+ * Prompt of the advisor and the fingerprint of its inputs: the same
+ * fingerprint means the same analysis, which is not run again.
+ * refs: the images of the finding, images: those attached (loaded).
+ */
+function reviewPrompt({ config, audit, finding, languages, customFields, refs = [], images = [], sendImages = false }) {
+    const adviceLanguage = (audit && audit.aiAdvisorLanguage || '').trim() || (config && config.advisorLanguage || '').trim() || DEFAULT_ADVICE_LANGUAGE
+    const values = buildValues({ audit, finding, fieldKey: ADVISOR_KEY, languages, customFields, adviceLanguage, imagesNote: imagesNoteFor(refs, images) })
+    const template = selectPrompt(ADVISOR_KEY, audit && audit.aiPrompts, config && config.prompts)
+    const prompt = renderPrompt(template, values)
+    // fingerprint of the inputs, not of the images actually loaded
+    const inputs = Object.assign({}, values, { images_note: '' })
+    const hash = crypto.createHash('sha256')
+        .update(JSON.stringify({ template, inputs, images: refs.map((r) => r.src), sendImages: !!sendImages, model: config && config.model }))
+        .digest('hex')
+    return { prompt, hash }
+}
+
+/*
+ * Runs the advisor. Returns {verdict, markdown, html, model, hash, date}.
+ */
+async function review({ config, audit, finding, languages, customFields, refs = [], images = [], sendImages = false, fetchImpl }) {
+    const { prompt, hash } = reviewPrompt({ config, audit, finding, languages, customFields, refs, images, sendImages })
+    const text = await complete(config, prompt, { fetchImpl, images })
+    const advice = parseAdvice(text)
+    if (!advice.markdown && advice.verdict === 'unknown') throw new AiError('The model returned an empty answer', 502)
+    return Object.assign(advice, { model: config.model, hash, date: new Date().toISOString(), images: images.length })
+}
+
+/*
+ * Low-quality flag after an analysis: the advisor raises it on an
+ * insufficient verdict (unless a user lowered it for this very content) and
+ * lowers it on an ok verdict only when it raised it itself.
+ * Returns the fields to set: {lowQuality, lowQualitySource} or {}.
+ */
+function flagUpdate(finding, result) {
+    const raised = !!finding.lowQuality
+    if (result.verdict === 'insufficient' && !raised && finding.lowQualityDismissedHash !== result.hash)
+        return { lowQuality: true, lowQualitySource: 'ai' }
+    if (result.verdict === 'ok' && raised && finding.lowQualitySource === 'ai')
+        return { lowQuality: false, lowQualitySource: null }
+    return {}
 }
 
 module.exports = {
@@ -466,6 +678,16 @@ module.exports = {
     cleanAnswer,
     toFieldValue,
     generate,
+    renderPrompt,
+    userContent,
+    ADVISOR_KEY,
+    DEFAULT_ADVICE_LANGUAGE,
+    VERDICTS,
+    adviceHtml,
+    parseAdvice,
+    reviewPrompt,
+    review,
+    flagUpdate,
 }
 
 /*
@@ -537,6 +759,8 @@ function parseConfigUpdate(body) {
         update.extraBody = extra
     }
     if (input.prompts !== undefined) update.prompts = parsePrompts(input.prompts, errors)
+    if (input.supportsImages !== undefined) update.supportsImages = input.supportsImages === true
+    if (input.advisorLanguage !== undefined) update.advisorLanguage = String(input.advisorLanguage || '').trim().substring(0, 64)
     return { update, errors }
 }
 

@@ -23,6 +23,18 @@
             v-if="frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
           />
           <q-btn
+            v-if="advisorEnabled && frontEndAuditState === AUDIT_VIEW_STATE.EDIT"
+            color="secondary"
+            class="q-mr-sm"
+            icon="fa fa-clipboard-check"
+            :label="$t('ai.checkQuality')"
+            :loading="aiReviewRunning"
+            no-caps
+            @click="checkQuality()"
+          >
+            <q-tooltip anchor="bottom middle" self="top middle" :delay="300">{{$t('ai.checkQualityTooltip')}}</q-tooltip>
+          </q-btn>
+          <q-btn
             color="positive"
             :disable="!readyToSave"
             :label="$t('btn.save') + ' (ctrl+s)'"
@@ -54,7 +66,18 @@
               checked-icon="check"
               unchecked-icon="clear"
               color="green"
+              @update:model-value="onStatusChange"
             />
+            <q-toggle
+              :label="$t('ai.lowQuality')"
+              v-model="finding.lowQuality"
+              checked-icon="warning"
+              unchecked-icon="clear"
+              color="amber-8"
+              @update:model-value="needSave = true"
+            >
+              <q-tooltip :delay="500">{{ finding.lowQuality && finding.lowQualitySource === 'ai' ? $t('ai.lowQualityByAdvisor') : $t('ai.lowQualityTooltip') }}</q-tooltip>
+            </q-toggle>
           </template>
           <q-space />
         </q-tabs>
@@ -98,6 +121,41 @@
                   outlined
                   :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
                 />
+                <!-- Quality advisor: read-only advice stored with the finding -->
+                <div v-if="advisorEnabled || hasReview" class="col-12">
+                  <q-card flat bordered>
+                    <q-expansion-item v-model="advisorOpen" header-class="bg-grey-2">
+                      <template v-slot:header>
+                        <q-item-section avatar>
+                          <q-icon name="fa fa-clipboard-check" :color="verdictInfo.color" />
+                        </q-item-section>
+                        <q-item-section>
+                          <q-item-label>
+                            {{ $t('ai.advisor') }}
+                            <q-badge v-if="hasReview" class="q-ml-sm" :color="verdictInfo.color" :label="verdictInfo.label" />
+                          </q-item-label>
+                          <q-item-label caption>{{ reviewCaption }}</q-item-label>
+                        </q-item-section>
+                        <q-item-section side v-if="aiReviewRunning">
+                          <div class="row items-center no-wrap text-secondary">
+                            <q-spinner-dots size="1.5em" class="q-mr-xs" />{{ $t('ai.analysing') }}
+                          </div>
+                        </q-item-section>
+                      </template>
+                      <q-card-section>
+                        <q-banner v-if="finding.aiReview && finding.aiReview.error" dense class="bg-red-1 text-red-10 q-mb-sm">
+                          <template v-slot:avatar><q-icon name="error" color="red-10" /></template>
+                          {{ $t('ai.reviewFailed') }}: {{ finding.aiReview.error }}
+                        </q-banner>
+                        <div v-if="needSave && hasReview" class="text-caption text-orange-9 q-mb-sm">
+                          <q-icon name="update" /> {{ $t('ai.adviceOutdated') }}
+                        </div>
+                        <div v-if="finding.aiReview && finding.aiReview.html" class="ai-advice" v-html="finding.aiReview.html"></div>
+                        <div v-else class="text-grey-7">{{ $t('ai.noAdvice') }}</div>
+                      </q-card-section>
+                    </q-expansion-item>
+                  </q-card>
+                </div>
                 <q-field class="col-md-12 basic-editor" borderless :label="$t('description')" stack-label>
                   <template #control>
                     <basic-editor
@@ -274,6 +332,31 @@
             </q-card>
           </q-tab-panel>
         </q-tab-panels>
+
+        <!-- Notes for the AI about this finding: never in the report -->
+        <div v-if="localAudit && localAudit.aiEnabled" class="col-md-8 col-12 offset-md-2 q-px-md q-mb-lg">
+          <q-expansion-item
+            dense
+            icon="fa fa-sticky-note"
+            :label="$t('ai.findingHints')"
+            :caption="finding.aiHints ? '' : $t('ai.findingHintsCaption')"
+            header-class="text-grey-8"
+            :default-opened="!!finding.aiHints"
+          >
+            <q-input
+              class="q-pt-sm"
+              v-model="finding.aiHints"
+              type="textarea"
+              autogrow
+              outlined
+              dense
+              :placeholder="$t('ai.findingHintsPlaceholder')"
+              :hint="$t('ai.findingHintsHint')"
+              :readonly="frontEndAuditState !== AUDIT_VIEW_STATE.EDIT"
+              @update:model-value="needSave = true"
+            />
+          </q-expansion-item>
+        </div>
       </div>
     
     <!-- AI assistant: new title to compare with the current one -->
