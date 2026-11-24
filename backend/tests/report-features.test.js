@@ -213,11 +213,102 @@ module.exports = function () {
     })
   })
 
+  describe('Fields split at their images', () => {
+    var htmlSplit = require('../src/lib/html-split')
+    var numIds = (ooxml) => (ooxml.match(/<w:numId w:val="(\d+)"\/>/g) || []).map((m) => m.match(/\d+/)[0])
+    var render = (html) => {
+      var registry = {}
+      var next = 20
+      var opts = { listRegistry: registry, allocateList: () => next++ }
+      return htmlSplit.split(html).filter((p) => p.text !== undefined && !htmlSplit.isEmptyPart(p.text)).map((p) => html2ooxml(p.text, '', [], opts))
+    }
+
+    it('closes and opens again the elements around an image', () => {
+      var parts = htmlSplit.split('<ol><li><p>a</p><img src="x" alt="c"><p>b</p></li><li><p>c</p></li></ol>')
+      expect(parts.map((p) => p.text || 'IMG')).toEqual([
+        '<ol data-pwd-list="L1" data-pwd-field="F1"><li><p>a</p></li></ol>',
+        'IMG',
+        '<ol data-pwd-resume="L1" data-pwd-field="F1"><li data-pwd-continued="1"><p>b</p></li><li><p>c</p></li></ol>',
+      ])
+    })
+
+    it('keeps one numbered list around an image, without bullet nor restart', () => {
+      var out = render('<ol><li><p>one</p></li><li><p>two</p><img src="x" alt="c"><p>more about two</p></li><li><p>three</p></li></ol>')
+      expect(out.length).toBe(2)
+      expect(numIds(out[0])).toEqual(['20', '20'])
+      expect(numIds(out[1])).toEqual(['20']) // "three" only, "more about two" has no number
+      expect(out[1]).toMatch(/<w:ind w:left="720"\/>.*more about two/)
+      expect(out.join('')).not.toContain('<w:numId w:val="1"/>') // never the bullet definition
+    })
+
+    it('continues a list started before an image ("4." after the image)', () => {
+      var out = render('<ol><li><p>a</p></li><li><p>b</p></li><li><p>c</p></li></ol><img src="x" alt="c"><ol start="4"><li><p>d</p></li></ol><p>x</p><ol><li><p>new</p></li></ol>')
+      expect(numIds(out[0])).toEqual(['20', '20', '20'])
+      expect(numIds(out[1])).toEqual(['20', '21'])
+    })
+
+    it('drops the parts holding only tags', () => {
+      expect(htmlSplit.isEmptyPart('<ol data-pwd-resume="L1"><li data-pwd-continued="1"></li></ol>')).toBe(true)
+      expect(htmlSplit.isEmptyPart('<p>x</p>')).toBe(false)
+    })
+  })
+
+  describe('Image borders in the pixels', () => {
+    var imageBorder = require('../src/lib/image-border')
+    var { PNG } = require('pngjs')
+    var png = (w, h) => {
+      var p = new PNG({ width: w, height: h })
+      p.data.fill(255)
+      return 'data:image/png;base64,' + PNG.sync.write(p).toString('base64')
+    }
+
+    it('draws the border around the image, scaled to its displayed width', () => {
+      var out = imageBorder.withBorder(png(10, 5), { width: 2, color: 'FF0000' })
+      var img = PNG.sync.read(Buffer.from(out.split(',')[1], 'base64'))
+      expect([img.width, img.height]).toEqual([14, 9])
+      expect(Array.from(img.data.slice(0, 4))).toEqual([255, 0, 0, 255])
+      var center = ((4 * 14) + 7) * 4
+      expect(Array.from(img.data.slice(center, center + 4))).toEqual([255, 255, 255, 255])
+      var big = PNG.sync.read(Buffer.from(imageBorder.withBorder(png(1200, 10), { width: 2 }).split(',')[1], 'base64'))
+      expect(big.width).toBe(1200 + 2 * 4) // 2px at 600px displayed = 4px of the image
+    })
+
+    it('leaves the formats it cannot decode', () => {
+      expect(imageBorder.withBorder('data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=', { width: 2 })).toBe(null)
+      expect(imageBorder.withBorder(png(2, 2), null)).toBe(null)
+    })
+  })
+
+  describe('Legendary colors', () => {
+    it('stay readable on the background of the cell', () => {
+      var lum = (hex) => [0, 2, 4].map((i) => parseInt(hex.substr(i, 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0)
+      var contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)
+      for (var bg of ['2D0A4E', 'FFFFFF', '000000', 'FFC000', '7030A0']) {
+        for (var color of markers.rainbow(9, bg)) expect(contrast(color, bg)).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+  })
+
+  describe('Identifiers of the findings', () => {
+    it('follow the format of the template', () => {
+      expect(reportStyles.formatIdentifier('F-{n}', 8)).toBe('F-8')
+      expect(reportStyles.formatIdentifier('F-{n}', 12)).toBe('F-12')
+      expect(reportStyles.formatIdentifier(undefined, 8)).toBe('IDX-008')
+      expect(reportStyles.formatIdentifier('VULN-{n:2}', 3)).toBe('VULN-03')
+      expect(reportStyles.sanitize({ identifierFormat: 'no number', findingsOrder: 'random' })).toEqual({})
+      expect(reportStyles.resolve().findingsOrder).toBe('score')
+    })
+  })
+
   describe('Images of the findings API', () => {
     it('removes the trailing dot of a new caption once', () => {
       var html = markdown.prepareImages(markdown.toHtml('![Login page.](0123456789abcdef01234567)'))
       expect(html).toContain('alt="Login page" data-caption-trimmed="true"')
       expect(markdown.trimCaption('Wait...')).toBe('Wait...')
+    })
+
+    it('sets the flag only when a dot was removed', () => {
+      expect(markdown.prepareImages('<img src="a" alt="No dot">')).toBe('<img src="a" alt="No dot">')
     })
 
     it('keeps the caption and the border of an image already in the field', () => {

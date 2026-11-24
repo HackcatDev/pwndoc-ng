@@ -286,11 +286,51 @@ function hslToHex(h, s, l) {
     return [f(0), f(8), f(4)].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('').toUpperCase()
 }
 
-// Colors of the letters of a text of `count` characters, red to violet
-function rainbow(count) {
+function luminance(hex) {
+    const c = [0, 2, 4].map((i) => parseInt(hex.substring(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)))
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+function contrast(a, b) {
+    const la = luminance(a)
+    const lb = luminance(b)
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+}
+
+const MIN_CONTRAST = 4.5
+
+/*
+ * Colors of the letters of a text of `count` characters, red to violet,
+ * readable on `background`: each hue is made lighter (dark background) or
+ * darker (light background) until it contrasts enough with it.
+ */
+function rainbow(count, background = null) {
+    const bg = /^[0-9A-F]{6}$/i.test(background || '') ? background.toUpperCase() : null
     const colors = []
-    for (let i = 0; i < count; i++) colors.push(hslToHex(count > 1 ? (285 * i) / (count - 1) : 0, 100, 50))
+    for (let i = 0; i < count; i++) {
+        const hue = count > 1 ? (285 * i) / (count - 1) : 0
+        let lightness = 50
+        let color = hslToHex(hue, 100, lightness)
+        if (bg) {
+            const step = luminance(bg) < 0.18 ? 2 : -2
+            while (contrast(color, bg) < MIN_CONTRAST && lightness > 0 && lightness < 100) {
+                lightness += step
+                color = hslToHex(hue, 100, lightness)
+            }
+        }
+        colors.push(color)
+    }
     return colors
+}
+
+// Fill of the cell holding a run (white when not shaded)
+function backgroundOf(run) {
+    const tc = ancestor(run, 'tc')
+    const tcPr = tc ? dom.firstChild(tc, 'tcPr') : null
+    const shd = tcPr ? dom.firstChild(tcPr, 'shd') : null
+    const fill = shd ? dom.getVal(shd, 'fill') : null
+    return fill && /^[0-9A-F]{6}$/i.test(fill) ? fill : 'FFFFFF'
 }
 
 // Splits a run holding only text into one run per character, in rainbow colors
@@ -301,7 +341,7 @@ function rainbowRun(run) {
     if (!chars.length) return false
     const doc = run.ownerDocument
     const rPr = dom.firstChild(run, 'rPr')
-    const colors = rainbow(chars.filter((c) => c.trim() !== '').length)
+    const colors = rainbow(chars.filter((c) => c.trim() !== '').length, backgroundOf(run))
     let i = 0
     for (const c of chars) {
         const r = newRun(doc, rPr, [textElement(doc, c)])

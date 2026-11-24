@@ -225,9 +225,9 @@ function toHtml(markdown) {
  * (border, caption already processed), so an update would lose them:
  * prepareImages(html, previousHtml) gives every image of `html` the
  * attributes of the image with the same src in the previous value of the
- * field. An image that was not there before is being inserted: the trailing
- * dot of its caption is removed and data-caption-trimmed="true" is set, so
- * that a dot added back later is kept.
+ * field. The trailing dot of a caption is removed once: data-caption-trimmed
+ * ="true" is set when it was, so that a dot added back later is kept (the
+ * same rule as the editor and the report generator).
  */
 const IMG_TAG_REGEX = /<img\b[^>]*>/g
 
@@ -261,11 +261,15 @@ function prepareImages(html, previousHtml) {
         const before = src ? previous[src] : null
         let out = tag
         const alreadyTrimmed = imgAttribute(tag, 'data-caption-trimmed') === 'true' || (before && imgAttribute(before, 'data-caption-trimmed') === 'true')
-        if (!alreadyTrimmed) {
+        if (alreadyTrimmed) out = setImgAttribute(out, 'data-caption-trimmed', 'true')
+        else {
             const alt = imgAttribute(tag, 'alt')
-            if (alt !== null) out = setImgAttribute(out, 'alt', trimCaption(unescapeAttribute(alt)))
+            const caption = alt === null ? null : unescapeAttribute(alt)
+            if (caption !== null && trimCaption(caption) !== caption.replace(/\s+$/, '')) {
+                out = setImgAttribute(out, 'alt', trimCaption(caption))
+                out = setImgAttribute(out, 'data-caption-trimmed', 'true')
+            }
         }
-        out = setImgAttribute(out, 'data-caption-trimmed', 'true')
         if (before && imgAttribute(out, 'data-border-width') === null && imgAttribute(before, 'data-border-width') !== null) {
             out = setImgAttribute(out, 'data-border-width', unescapeAttribute(imgAttribute(before, 'data-border-width')))
             const color = imgAttribute(before, 'data-border-color')

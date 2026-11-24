@@ -1,23 +1,19 @@
 import Image from "@tiptap/extension-image";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Fragment, Slice } from "prosemirror-model";
+import { captionAttrs } from "./image-caption";
 import { VueNodeViewRenderer } from "@tiptap/vue-3";
 
 import uploadImage from "./uploadImage.vue";
 import ImageService from "@/services/image";
 import Utils from "@/services/utils";
 
-// Caption of an image being inserted: one trailing dot removed (not an ellipsis)
-export function trimCaption(caption) {
-  return String(caption || "").replace(/\s+$/, "").replace(/([^.])\.$/, "$1");
-}
-
 // Images of pasted content that were not processed yet get their caption trimmed
 function trimPastedCaptions(fragment) {
   const nodes = [];
   fragment.forEach((node) => {
     if (node.type.name === "custom_image" && !node.attrs.captionTrimmed) {
-      nodes.push(node.type.create({ ...node.attrs, alt: trimCaption(node.attrs.alt), captionTrimmed: true }, node.content, node.marks));
+      nodes.push(node.type.create({ ...node.attrs, ...captionAttrs(node.attrs.alt, false) }, node.content, node.marks));
     } else if (node.isLeaf || node.isText) {
       nodes.push(node);
     } else {
@@ -147,7 +143,6 @@ export default Image.extend({
                       const node = schema.nodes.custom_image.create({
                         src: text,
                         alt: "External Image",
-                        captionTrimmed: true,
                       });
                       const { selection } = view.state.tr;
                       const transaction = view.state.tr.replaceRangeWith(
@@ -181,8 +176,7 @@ export default Image.extend({
                     .then((data) => {
                       const node = schema.nodes.custom_image.create({
                         src: data.data.datas._id,
-                        alt: trimCaption(file.name),
-                        captionTrimmed: true,
+                        ...captionAttrs(file.name, false),
                       });
                       const { selection } = view.state.tr;
                       const transaction = view.state.tr.replaceRangeWith(
@@ -223,7 +217,6 @@ export default Image.extend({
                       const node = schema.nodes.custom_image.create({
                         src: text,
                         alt: "External Image",
-                        captionTrimmed: true,
                       });
                       const { selection } = view.state.tr;
                       const transaction = view.state.tr.replaceRangeWith(
@@ -256,8 +249,7 @@ export default Image.extend({
                       .then((data) => {
                         const node = schema.nodes.custom_image.create({
                           src: data.data.datas._id,
-                          alt: trimCaption(blob.name || "image"),
-                          captionTrimmed: true,
+                          ...captionAttrs(blob.name || "image", false),
                         });
                         const { selection } = view.state.tr;
                         const transaction = view.state.tr.replaceRangeWith(

@@ -50,8 +50,14 @@ export default {
             stylesTemplate: null,
             stylesDefaults: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, toc: {}, headings: {}, findingLink: {}, severityColors: {}},
             currentStyles: {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null,
-                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null},
+                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null,
+                identifierFormat: null, findingsOrder: null},
             headingLevels: ['1', '2', '3', '4', '5', '6'],
+            findingsOrderOptions: [
+                {label: $t('styles.inherit'), value: null},
+                {label: $t('styles.findingsOrderScore'), value: 'score'},
+                {label: $t('styles.findingsOrderEditor'), value: 'editor'}
+            ],
             severities: [
                 {key: 'none', label: 'styles.severityNone'},
                 {key: 'low', label: 'styles.severityLow'},
@@ -89,6 +95,16 @@ export default {
 
     components: {
         Breadcrumb
+    },
+
+    computed: {
+        // First identifiers with the format of the template (same rule as the backend)
+        identifierExample: function() {
+            var format = (this.currentStyles.identifierFormat || '').trim()
+            if (!/\{n(:\d)?\}/.test(format)) format = this.stylesDefaults.identifierFormat || 'IDX-{n:3}'
+            var make = (n) => format.replace(/\{n(?::(\d))?\}/g, (m, pad) => pad ? String(n).padStart(parseInt(pad, 10), '0') : String(n))
+            return [1, 2, 10].map(make).join(', ') + ' ...'
+        }
     },
 
     mounted: function() {
@@ -280,7 +296,8 @@ export default {
 
         emptyStyles: function() {
             return {profiles: {}, inlineCode: {}, codeBlock: {}, link: {}, highlightSyntax: null, listNumbering: null, imageSpacing: null,
-                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null}
+                toc: {}, headings: {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}}, findingLink: {}, severityColors: {}, legendary: null,
+                identifierFormat: null, findingsOrder: null}
         },
 
         openStyles: function(row) {
@@ -306,6 +323,8 @@ export default {
                 styles.severityColors = Object.assign({}, saved.severityColors || {})
                 this.headingLevels.forEach(level => { styles.headings[level] = Object.assign({}, (saved.headings || {})[level] || {}) })
                 styles.legendary = (typeof saved.legendary === 'boolean') ? saved.legendary : null
+                styles.identifierFormat = saved.identifierFormat || null
+                styles.findingsOrder = saved.findingsOrder || null
                 this.currentStyles = styles
                 this.$refs.stylesModal.show()
             })
@@ -386,6 +405,8 @@ export default {
                 if (c) result.severityColors[k] = c
             })
             if (typeof styles.legendary === 'boolean') result.legendary = styles.legendary
+            if (styles.identifierFormat && String(styles.identifierFormat).trim()) result.identifierFormat = String(styles.identifierFormat).trim()
+            if (styles.findingsOrder) result.findingsOrder = styles.findingsOrder
             return result
         },
 

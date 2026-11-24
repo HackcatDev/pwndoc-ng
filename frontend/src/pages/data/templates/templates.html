@@ -328,6 +328,16 @@
 
             <q-separator class="q-my-md" />
 
+            <!-- Findings: order and identifiers -->
+            <div class="text-bold q-mb-sm">{{$t('styles.findings')}}</div>
+            <div class="text-grey-8 q-mb-sm" v-html="$t('styles.findingsInfo')"></div>
+            <div class="row q-col-gutter-sm">
+                <q-input class="col-md-3 col-6" dense outlined stack-label :label="$t('styles.identifierFormat')" v-model="currentStyles.identifierFormat" :placeholder="stylesDefaults.identifierFormat || 'IDX-{n:3}'" clearable :hint="identifierExample" />
+                <q-select class="col-md-4 col-6" dense outlined stack-label :label="$t('styles.findingsOrder')" v-model="currentStyles.findingsOrder" :options="findingsOrderOptions" emit-value map-options options-dense />
+            </div>
+
+            <q-separator class="q-my-md" />
+
             <!-- Links to findings: {link}...{/link} -->
             <div class="text-bold q-mb-sm">{{$t('styles.findingLinks')}}</div>
             <div class="text-grey-8 q-mb-sm" v-html="$t('styles.findingLinksInfo')"></div>

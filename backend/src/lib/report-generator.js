@@ -15,6 +15,8 @@ var templateStyles = require('./template-styles');
 var reportMarkers = require('./report-markers');
 var chartData = require('./chart-data');
 var plainText = require('./plain-text');
+var htmlSplit = require('./html-split');
+var imageBorder = require('./image-border');
 var _ = require('lodash');
 var Image = require('mongoose').model('Image');
 var Settings = require('mongoose').model('Settings');
@@ -34,6 +36,8 @@ var bulletDefinitionCreated = false // Flag to avoid creating bullet definition 
 var globalBulletNumId = null // Global variable to store dynamic bullet ID
 var currentStyles = null // Formatting configuration resolved for the template being rendered
 var numberingCtx = null // List definitions added to the template (null: use the template's numId 1/2)
+var splitContext = htmlSplit.createContext() // ids of the lists of the fields split at their images
+var listRegistry = {} // numbering of those lists, shared by the parts of a field (html2ooxml)
 
 const encodeHTMLEntities = s => s.replace(/[\u00A0-\u9999<>&]/g, i => '&#'+i.charCodeAt(0)+';')
 
@@ -76,6 +80,8 @@ async function generateDoc(audit) {
     abstractNumCreated = false;
     bulletDefinitionCreated = false;
     globalBulletNumId = null;
+    splitContext = htmlSplit.createContext();
+    listRegistry = {};
 
     var templatePath = `${__basedir}/../report-templates/${audit.template.name}.${audit.template.ext || 'docx'}`
     var content = fs.readFileSync(templatePath, "binary");
@@ -107,10 +113,7 @@ async function generateDoc(audit) {
     translate.setLocale(audit.language)
     $t = translate.translate
 
-    // set the identifier of each vulnerability to the index of the array
-    audit.findings.forEach((finding, index) => {
-        finding.identifier = index + 1
-    })
+    // the identifiers are given in the order of the report (prepAuditData)
 
     var settings = await Settings.getAll();
     var preppedAudit = await prepAuditData(audit, settings)
@@ -665,7 +668,7 @@ expressions.filters.convertHTML = function(input, style, listIds) {
 
     // One numbering instance per ordered list, allocated on demand: a list
     // restarts at 1 (or at its start number) unless it continues the previous one
-    var options = { styles: styles }
+    var options = { styles: styles, listRegistry: listRegistry }
     if (numberingCtx && listIdsArray.length === 0) {
         options.allocateList = function(start) { return numbering.allocateOrderedList(zip, numberingCtx, start) }
     }
@@ -1406,8 +1409,25 @@ async function prepAuditData(data, settings) {
         }))
     }
 
+    // Findings of the report: by CVSS base score, highest first, whatever the
+    // categories of the editor (unless the template keeps the editor order),
+    // then numbered with the identifier format of the template
+    var orderedFindings = Array.prototype.slice.call(data.findings || [])
+    if (!currentStyles || currentStyles.findingsOrder !== 'editor') {
+        var scoreOf = function(f) {
+            var cvss = CVSS31.calculateCVSSFromVector(f.cvssv3)
+            return cvss.success ? Number(cvss.baseMetricScore) : -1
+        }
+        orderedFindings = orderedFindings
+            .map((f, index) => ({f: f, index: index, score: scoreOf(f)}))
+            .sort((a, b) => (b.score - a.score) || (a.index - b.index))
+            .map(e => e.f)
+    }
+    var identifierFormat = currentStyles && currentStyles.identifierFormat
     result.findings = []
-    for (finding of data.findings) {
+    for (var findingIndex = 0; findingIndex < orderedFindings.length; findingIndex++) {
+        var finding = orderedFindings[findingIndex]
+        finding.identifier = findingIndex + 1
         var tmpCVSS = CVSS31.calculateCVSSFromVector(finding.cvssv3);
         var tmpFinding = {
             title: finding.title || "",
@@ -1426,7 +1446,7 @@ async function prepAuditData(data, settings) {
             affectedLines: plainText.toLines(finding.scope),
             status: finding.status || "",
             category: $t(finding.category) || $t("No Category"),
-            identifier: "IDX-" + utils.lPad(finding.identifier),
+            identifier: reportStyles.formatIdentifier(identifierFormat, finding.identifier),
             unique_id: finding._id.toString()
         }
         console.log(tmpFinding)
@@ -1538,19 +1558,21 @@ async function prepAuditData(data, settings) {
     return result
 }
 
+// Parts of a rich text field for the templates: [{text, images: [{image, caption, border}]}].
+// The HTML is split at its images keeping the elements around them balanced
+// (lists go on after an image, see lib/html-split.js).
 async function splitHTMLParagraphs(data) {
     var result = []
     if (!data)
         return result
 
-    var splitted = data.split(/(<img.+?src=".*?".+?alt=".*?".*?>)/)
-
-    for (value of splitted){
-        if (value.startsWith("<img")) {
-            var src = value.match(/<img.+src="(.*?)"/) || ""
-            var alt = value.match(/<img.+alt="(.*?)"/) || ""
-            if (src && src.length > 1) src = src[1]
-            if (alt && alt.length > 1) alt = _.unescape(alt[1])
+    for (var part of htmlSplit.split(data, splitContext)) {
+        if (part.image !== undefined) {
+            var tag = part.image
+            var src = tag.match(/\ssrc="(.*?)"/)
+            var alt = tag.match(/\salt="(.*?)"/)
+            src = src ? src[1] : ""
+            alt = alt ? _.unescape(alt[1]) : ""
 
             if (!src.startsWith('data')){
                 try {
@@ -1559,26 +1581,41 @@ async function splitHTMLParagraphs(data) {
                     src = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
                 }
             }
-            // Border set in the editor (data-border-width in px, data-border-color)
-            var borderWidth = value.match(/data-border-width="([^"]*)"/)
-            var borderColor = value.match(/data-border-color="([^"]*)"/)
+            // The trailing dot of a caption is removed unless the editor already
+            // processed it (data-caption-trimmed: a dot added back is kept)
+            if (!/data-caption-trimmed="true"/.test(tag)) alt = trimCaption(alt)
+
+            // Border set in the editor (data-border-width in px, data-border-color):
+            // drawn into a copy of the image; an outline is the fallback for the
+            // formats that cannot be decoded
+            var borderWidth = tag.match(/data-border-width="([^"]*)"/)
+            var borderColor = tag.match(/data-border-color="([^"]*)"/)
             var border = null
-            if (borderWidth && parseFloat(borderWidth[1]) > 0)
+            if (borderWidth && parseFloat(borderWidth[1]) > 0) {
                 border = {width: parseFloat(borderWidth[1]), color: borderColor ? borderColor[1].replace('#', '') : '000000'}
+                var bordered = imageBorder.withBorder(src, border)
+                if (bordered) {
+                    src = bordered
+                    border = null
+                }
+            }
 
             if (result.length === 0)
                 result.push({text: "", images: []})
             result[result.length-1].images.push({image: src, caption: alt, border: border})
         }
-        else if (value === "") {
-            continue
-        }
-        else {
-            result.push({text: value, images: []})
+        else if (!htmlSplit.isEmptyPart(part.text)) {
+            result.push({text: part.text, images: []})
         }
     }
     return result
 }
+
+// One trailing dot removed, an ellipsis kept
+function trimCaption(caption) {
+    return String(caption || '').replace(/\s+$/, '').replace(/([^.])\.$/, '$1')
+}
+exports.trimCaption = trimCaption
 
 function replaceSubTemplating(o, originalData = o){
     var regexp = /\{_\{([a-zA-Z0-9\[\]\_\.]{1,})\}_\}/gm;

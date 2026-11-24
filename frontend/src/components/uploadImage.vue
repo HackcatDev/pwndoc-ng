@@ -93,12 +93,14 @@
           v-model="alt"
           placeholder="Caption"
         />
-        <q-popup-edit v-model="alt" auto-save>
+        <!-- the caption is set when the popup closes (see the alt setter) -->
+        <q-popup-edit v-model="alt" auto-save v-slot="scope">
           <q-input
             input-class="text-center"
             autofocus
-            v-model="alt"
+            v-model="scope.value"
             placeholder="Caption"
+            @keyup.enter="scope.set"
           />
         </q-popup-edit>
       </div>
@@ -110,6 +112,7 @@ import { defineComponent } from 'vue';
 
 import { NodeViewWrapper, nodeViewProps } from "@tiptap/vue-3";
 import Utils from "@/services/utils";
+import { captionAttrs } from "./image-caption";
 
 const DEFAULT_BORDER_COLOR = "000000";
 
@@ -144,10 +147,9 @@ export default defineComponent({
       get() {
         return this.node.attrs.alt;
       },
+      // a trailing dot is removed the first time, kept when typed back
       set(alt) {
-        this.updateAttributes({
-          alt,
-        });
+        this.updateAttributes(captionAttrs(alt, this.node.attrs.captionTrimmed));
       },
     },
     borderWidth() {

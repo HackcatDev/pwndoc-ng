@@ -34,8 +34,8 @@
           <thead>
             <tr>
               <th class="text-left" style="width: 20%">{{$t('accountService')}}</th>
-              <th class="text-left" style="width: 17%">{{$t('accountUsername')}} *</th>
-              <th class="text-left" style="width: 17%">{{$t('accountPassword')}} *</th>
+              <th class="text-left" style="width: 17%">{{$t('accountUsername')}}</th>
+              <th class="text-left" style="width: 17%">{{$t('accountPassword')}}</th>
               <th class="text-left" style="width: 17%">{{$t('accountOtpSecret')}}</th>
               <th class="text-left">{{$t('accountNotes')}}</th>
               <th style="width: 1px" v-if="editable"></th>
@@ -45,13 +45,8 @@
             <tr v-for="(account, index) of accounts" :key="index">
               <td><q-input v-model="account.service" dense borderless placeholder="https://..." :readonly="!editable" /></td>
               <td><q-input v-model="account.username" dense borderless :readonly="!editable" /></td>
-              <td>
-                <q-input v-model="account.password" dense borderless :type="visible[index] ? 'text' : 'password'" :readonly="!editable">
-                  <template v-slot:append>
-                    <q-icon :name="visible[index] ? 'visibility_off' : 'visibility'" class="cursor-pointer" size="xs" @click="visible[index] = !visible[index]" />
-                  </template>
-                </q-input>
-              </td>
+              <!-- shown as plain text: the report prints it anyway -->
+              <td><q-input v-model="account.password" dense borderless :readonly="!editable" /></td>
               <td><q-input v-model="account.otpSecret" dense borderless :readonly="!editable" /></td>
               <td><q-input v-model="account.notes" dense borderless autogrow :readonly="!editable" /></td>
               <td v-if="editable" class="text-no-wrap">
@@ -97,7 +92,6 @@ export default {
       auditId: null,
       accounts: [],
       accountsOrig: [],
-      visible: {},
       AUDIT_VIEW_STATE: Utils.AUDIT_VIEW_STATE
     }
   },

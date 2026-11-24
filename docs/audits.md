@@ -41,7 +41,7 @@ At this point you may follow these steps:
 
 ## Test accounts
 
-Accounts given to the auditors for the test: target service (optional), username, password, 2FA secret (optional) and notes, one row per account. They are available in the report template as `testAccounts`, see [Docx Template](docxtemplate.md?id=testaccounts).
+Accounts given to the auditors for the test: target service, username, password, 2FA secret and notes, one row per account, every field optional. The values are shown as typed, the password too since the report prints it: remove from the template the columns that must not be in the report. They are available in the report template as `testAccounts`, see [Docx Template](docxtemplate.md?id=testaccounts).
 
 ## Findings
 

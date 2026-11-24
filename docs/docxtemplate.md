@@ -79,7 +79,7 @@ The paragraph holding the tag disappears and the shading is merged into the cell
 
 Several cells of a row can carry the tag, e.g. the identifier and the score of a finding. The colors are the *Severity colors* of the template's Report formatting, the CVSS colors of *Settings > Report* otherwise.
 
-**Legendary severity**: with *Enable Legendary severity* in the Report formatting of the template, the Critical findings scored 9.5 or more get the severity `Legendary` (`cvss.baseSeverity`, `temporalSeverity` and `environmentalSeverity`, according to the matching score, and `cvss.legendary` is true). Their `cellColor` cells take the Legendary color and the text of those cells, like the word *Legendary* anywhere in the document, is painted in rainbow colors. `{findings | count:'Critical'}` counts them with the Critical ones, `{findings | count:'Legendary'}` counts them alone.
+**Legendary severity**: with *Enable Legendary severity* in the Report formatting of the template, the Critical findings scored 9.5 or more get the severity `Legendary` (`cvss.baseSeverity`, `temporalSeverity` and `environmentalSeverity`, according to the matching score, and `cvss.legendary` is true). Their `cellColor` cells take the Legendary color and the text of those cells, like the word *Legendary* anywhere in the document, is painted in rainbow colors, lightened or darkened to stay readable on the background of the cell. `{findings | count:'Critical'}` counts them with the Critical ones, `{findings | count:'Legendary'}` counts them alone.
 
 ### Headings and links to findings
 
@@ -304,8 +304,12 @@ List of findings. Array of Objects:
 * **findings[i].category**
 * **findings[i].identifier**
 
-Identifier consists on a sequential id for the reported vulnerability pre-pended with 'IDX-'. Ex: IDX-001.
-You can replace the prefix by using the filter ```changeID```
+Identifier consists on a sequential id for the reported vulnerability, formatted with the *Identifier format* of the template's Report formatting: `IDX-{n:3}` by default (IDX-001), `F-{n}` gives F-1, F-2 ... F-10 (`{n}` the number, `{n:3}` the number padded to 3 digits).
+With the default format you can also replace the prefix by using the filter ```changeID```.
+
+The findings of the report are ordered by CVSS base score, highest first, whatever the categories and the order of the audit editor (findings without CVSS last, equal scores in the editor order); *Order of the findings* in the Report formatting keeps the editor order instead. The identifiers follow that order.
+
+Images of a rich text field (`{#images}` parts): the caption loses its trailing dot unless the editor kept one deliberately (a dot typed back after it was removed), and the border set in the editor is drawn into the pixels of a copy of the image (PNG and JPEG; the original stays in pwndoc, removing the border and generating again gives it back). A field is split at its images keeping its lists whole: the numbering goes on after an image and the text after an image inside a list item stays in that item.
 
 Additional fields will also be added to the findings Array. The key will be lowercase + strip spaces of the label.  
 Eg. if Custom Field label is `Aggravating Factors` it will be added to the array as `findings[i].aggravatingfactors`.
@@ -389,6 +393,8 @@ Text coming from the HTML editors (`{@field | convertHTML}`) is formatted from a
 | `findingLink` | `{link}...{/link}` | color (default `0563C1`), underline (default `true`), bold, italic, rStyle |
 | `severityColors` | `{@cvss.cellColor}` and the other severity cell colors | none, low, medium, high, critical, legendary (default: the CVSS colors of the settings, `2D0A4E` for legendary) |
 | `legendary` | severities | `true`: Critical findings scored 9.5 or more are Legendary (default `false`) |
+| `identifierFormat` | `{identifier}` of the findings | `{n}` the number, `{n:3}` padded to 3 digits (default `IDX-{n:3}`) |
+| `findingsOrder` | order of `findings` | `score` (default): CVSS base score, highest first; `editor`: order of the audit editor |
 
 Colors are hex RGB with or without `#`. The name given to `convertHTML` that does not match a profile is used as a Word paragraph style id (previous behaviour).
 

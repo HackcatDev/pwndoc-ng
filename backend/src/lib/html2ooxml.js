@@ -216,6 +216,10 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
   const availableListIds = Array.isArray(listIds) ? listIds.slice() : [];
   const allocateList = options && typeof options.allocateList === "function" ? options.allocateList : null;
   let lastOrdered = null;     // last top level ordered list: {numId, next}
+  // Lists shared by the parts of a field split at its images (lib/html-split.js):
+  // {lists: {Ln: {numId, next}}, fields: {Fn: {numId, next}}}
+  const registry = options && options.listRegistry ? options.listRegistry : null;
+  if (registry) { registry.lists = registry.lists || {}; registry.fields = registry.fields || {}; }
   let inPre = false;
   let inCodeInline = 0;
   let link = null;            // {href}
@@ -576,18 +580,32 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
             const parsedStart = parseInt(attribs.start, 10);
             const start = isFinite(parsedStart) && parsedStart >= 0 ? parsedStart : 1;
             let first = start;
+            const listKey = attribs["data-pwd-resume"] || attribs["data-pwd-list"] || null;
+            const fieldKey = attribs["data-pwd-field"] || null;
+            const resumed = registry && attribs["data-pwd-resume"] ? registry.lists[attribs["data-pwd-resume"]] : null;
+            const previous = (registry && fieldKey && registry.fields[fieldKey]) || lastOrdered;
             if (parentNumbered) numId = parentNumbered;
-            else if (topLevel && start !== 1 && lastOrdered && start === lastOrdered.next) {
-              numId = lastOrdered.numId; // continues the previous list
-              first = lastOrdered.next;
+            else if (topLevel && resumed) {
+              numId = resumed.numId; // the same list, after an image
+              first = resumed.next;
+            }
+            else if (topLevel && start !== 1 && previous && start === previous.next) {
+              numId = previous.numId; // continues the previous list
+              first = previous.next;
             }
             else if (allocateList) numId = parseInt(allocateList(start), 10) || NUMBERED_NUM_ID;
             else if (availableListIds.length) numId = parseInt(availableListIds.shift(), 10) || NUMBERED_NUM_ID;
             else numId = NUMBERED_NUM_ID;
-            lists.push({ type: "number", numId, topLevel, first, count: 0 });
+            lists.push({ type: "number", numId, topLevel, first, count: 0, listKey, fieldKey });
             break;
           }
           case "li":
+            // the item an image was in, opened again after the image: its text
+            // goes on aligned with the item, without a new number or bullet
+            if (attribs["data-pwd-continued"] && lists.length) {
+              if (para) closeParagraph();
+              break;
+            }
             if (lists.length) lists[lists.length - 1].count = (lists[lists.length - 1].count || 0) + 1;
             openListItemParagraph();
             break;
@@ -708,7 +726,11 @@ function html2ooxml(html, style = "", listIds = [], options = {}) {
             discardEmptyListParagraph();
             if (para) closeParagraph();
             const list = lists.pop();
-            if (list && list.type === "number" && list.topLevel) lastOrdered = { numId: list.numId, next: list.first + list.count };
+            if (list && list.type === "number" && list.topLevel) {
+              lastOrdered = { numId: list.numId, next: list.first + list.count };
+              if (registry && list.listKey) registry.lists[list.listKey] = lastOrdered;
+              if (registry && list.fieldKey) registry.fields[list.fieldKey] = lastOrdered;
+            }
             break;
           }
           case "colgroup":

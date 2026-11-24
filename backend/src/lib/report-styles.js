@@ -38,7 +38,11 @@
  *   "severityColors": { none, low, medium, high, critical, legendary },
  *                                // cell colors ({@cvss.cellColor}), default:
  *                                // the CVSS colors of the settings
- *   "legendary": false           // findings scored 9.5 or more are "Legendary"
+ *   "legendary": false,          // findings scored 9.5 or more are "Legendary"
+ *   "identifierFormat": "IDX-{n:3}", // identifier of the findings: {n} is the
+ *                                // number, {n:3} the number padded to 3 digits
+ *   "findingsOrder": "score"     // "score": by CVSS base score, highest first;
+ *                                // "editor": the order of the audit editor
  * }
  *
  * Sizes are in points, colors are hex RGB (with or without '#'), spacing in
@@ -65,6 +69,8 @@ const DEFAULTS = {
     findingLink: { color: '0563C1', underline: true },
     severityColors: { legendary: '2D0A4E' },
     legendary: false,
+    identifierFormat: 'IDX-{n:3}',
+    findingsOrder: 'score',
     syntaxColors: {
         'hljs-keyword': '0000FF',
         'hljs-built_in': '795E26',
@@ -224,6 +230,11 @@ function sanitize(input) {
         }
     }
     if (input.legendary !== undefined && input.legendary !== null && input.legendary !== '') out.legendary = !!input.legendary
+    if (typeof input.identifierFormat === 'string') {
+        const format = input.identifierFormat.trim().substring(0, 32).replace(/[<>&"]/g, '')
+        if (/\{n(:\d)?\}/.test(format)) out.identifierFormat = format
+    }
+    if (input.findingsOrder === 'score' || input.findingsOrder === 'editor') out.findingsOrder = input.findingsOrder
     if (input.syntaxColors && typeof input.syntaxColors === 'object') {
         out.syntaxColors = {}
         for (const cls of Object.keys(input.syntaxColors)) {
@@ -233,6 +244,12 @@ function sanitize(input) {
         }
     }
     return out
+}
+
+// Identifier of the n-th finding: {n} the number, {n:3} padded to 3 digits
+function formatIdentifier(format, n) {
+    const pattern = typeof format === 'string' && /\{n(:\d)?\}/.test(format) ? format : DEFAULTS.identifierFormat
+    return pattern.replace(/\{n(?::(\d))?\}/g, (m, pad) => (pad ? String(n).padStart(parseInt(pad, 10), '0') : String(n)))
 }
 
 // Severity colors of the settings (Settings > Report > CVSS colors), without '#'
@@ -262,4 +279,5 @@ module.exports = {
     resolve,
     sanitize,
     severityColorsFromSettings,
+    formatIdentifier,
 }
